@@ -16,9 +16,9 @@ To print debug information and intermediate files:
 
 Catalyst generates following intermediate files:
 
-utlc.vcs - Pretty printed verification conditions (VCs)
-utlcs.evcs - Elaborated VCs
-catalyst.z3 - VCs encoded in SMT-LIB. Can be passed to Z3 SMT solver.
+* utlc.vcs - Pretty printed verification conditions (VCs)
+* utlcs.evcs - Elaborated VCs
+* catalyst.z3 - VCs encoded in SMT-LIB. Can be passed to Z3 SMT solver.
 
 To print core-ml and A-Normalized core-ml:
 
