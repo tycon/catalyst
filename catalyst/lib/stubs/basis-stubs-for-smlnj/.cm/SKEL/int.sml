@@ -1,0 +1,2 @@
+Skeleton 5
+d8aеҐFixInt"i1aдҐPInt"h1eзр±гҐINTEGER"jh2egp1€f3d"Char"€d"String"€aдҐFixedInt"jh1egp2дҐPervasive"€Бзр±€aдҐInt"jh1egp2€Б€Б-€Б'CaдҐInt31"jh1egp2€Б€В€Б'aдҐInt32"jh1egp2€Б€В€Б'aдҐInt64"jh1egp2€Б€В7€Б'aдҐLargeInt"jh1egp2€Б€Г€Б'aдҐPosition"jh1egp2€Б€Г,€Б'N

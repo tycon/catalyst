@@ -1,0 +1,2 @@
+Skeleton 5
+d2aã¢SPEC_LANG_STRUCTS"h1egp1c"ATOMS"ac"SPEC_LANG"h9egp1ÿf5Cd"Con"d"Var"d"TypeDesc"d"Tyvar"d"Layout"Nad"RelLang"h3ad"RelId"gp1c"ID"ad"RelType"è0ad"RelTypeScheme"ÿ‚ad"StructuralRelation"ÿ‚Cad"TyDBinds"gp1c"APPLICATIVE_MAP"ad"Predicate"h2ad"BasePredicate"ÿ‚ad"RelPredicate"ÿ‚ad"RefinementType"ÿ‚ad"RefinementTypeScheme"ÿ‚ad"RelSpec"h1ad"TypeSpec"ÿ‚N

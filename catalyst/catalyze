@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+
+# This script calls Catalyst.
+
+set -e
+
+dir=`dirname "$0"`
+lib='/Users/gowtham/git/mlton/newexecs/usr/local/lib/mlton'
+eval `"$lib/platform"`
+gcc='gcc'
+case "$HOST_OS" in
+mingw)
+	exe='.exe'
+;;
+hpux)
+        ia64hpux="-mlp64"
+;;
+*)
+	exe=''
+;;
+esac
+# Uncomment the following line and ...
+mlton="./make"
+# comment the following to execute catalyst compiled with mlton
+#smlnj='sml'
+if $smlnj -h >/dev/null 2>&1; then
+        smlnj_heap_suffix=`echo 'TextIO.output (TextIO.stdErr, SMLofNJ.SysInfo.getHeapSuffix ());' | $smlnj 2>&1 1> /dev/null`
+        mlton_smlnj_heap="mlton-smlnj.$smlnj_heap_suffix"
+else
+        mlton_smlnj_heap=""
+fi
+
+mlton_polyml="$lib/mlton-polyml$exe"
+
+declare -a rargs
+case "$1" in
+@MLton)
+        shift
+        while [ "$#" -gt 0 -a "$1" != "--" ]; do
+                rargs[${#rargs[@]}]="$1"
+                shift
+        done
+        if [ "$#" -gt 0 -a "$1" == "--" ]; then
+                shift
+        else
+                echo '@MLton missing --'
+                exit 1
+        fi
+        ;;
+esac
+
+doitMLton () {
+    exec "$mlton" @MLton ram-slop 0.5 "${rargs[@]}" -- "$@"
+}
+doitSMLNJ () {
+    exec "$smlnj" @SMLload="$mlton_smlnj_heap" "$@"
+}
+doitPolyML () {
+    exec "$mlton_polyml" "$@"
+}
+
+doit () {
+        if [ -x "$mlton" ]; then
+            doitMLton "$@"
+        elif [ -s "$mlton_smlnj_heap" ]; then
+            doitSMLNJ "$@"
+        elif [ -x "$mlton_polyml" ]; then
+            doitPolyML "$@"
+        fi
+        echo 'Unable to run MLton.  Check that lib is set properly.' >&2
+        exit 1
+}
+
+doit "$lib" \
+        -mlb-path-map "$lib/mlb-path-map"                        \
+        "$@"

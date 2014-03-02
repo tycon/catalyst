@@ -1,0 +1,2 @@
+Skeleton 5
+d6f5Cd"Int"дўIEEEReal"d"LargeInt"дўLargeReal"дўStringCvt"NCaгўREAL"h1ad"Math"gp1c"MATH"aеўFixReal"i1aдўPReal"h1egp1c"PERVASIVE_REAL"jh4egp1яЃ%f1яbad"P"gp2дўPervasive"яf0f5Cd"Char"d"String"d"CharVector"яЃ%я-Ngp1я<aя!jh1egp2я‚я!зр±яЃaдўReal"jh1egp2я‚яѓ,яѓ%aдўReal64"jh1egp2я‚я„яѓ%Cad"Real32"gp1я„ad"PackReal32Big"ки0зр±гўPACK_REAL"ad"PackReal32Little"я„?ad"PackReal64Big"я„?ad"PackReal64Little"я„?N

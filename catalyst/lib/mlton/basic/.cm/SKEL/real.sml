@@ -1,0 +1,2 @@
+Skeleton 5
+d4aеўReal"i2aдяh1egp1c"PERVASIVE_REAL"f±яjh5CaдўIn"gp1d"In0"aдўR"jh3aя?jh2aя?jh2езря(f2яd"Layout"gp1e"Ring"гІезр±я?яЃgp1e"RingWithIdentity"яЃ.f1d"Relation"gp1e"OrderedRing"aдўF"jh1яЃ.gp1e"OrderedField"c2egp1я‚1яЃegp1d"Math"Cf1я0bяЃf1дўIEEEReal"f2яѓ/яad"Format"h1egp1d"StringCvt"ad"Class"h0Ngp1c"REAL"aдўReal64"jh1eзр±я„4зр±яaяя…aдўReal32"jh1egp1я…я…

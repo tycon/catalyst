@@ -1,0 +1,2 @@
+Skeleton 5
+ae"Main"i1aä¢S"gp1c"MAIN_STRUCTS"jh9egp1ÿf5Cä¢Char"ä¢File"ä¢List"ä¢String"ä¢Error"Naä¢Compile"jè0gp1eÿaä¢Place"ÿ Cad"OptPred"ÿ bc2åçğ±ä¢Control"egp±ä¢Popt"f3ÿ;d"Regexp"ÿfÿ‚bd2ÿ‚f6ä¢OS"Cd"Int"ä¢Out"ÿ-ÿ4ÿ;Cÿd"Version"d"Bytes"ÿÿ‚Nf5Cd"Exn"ÿƒÿ4d"Result"ÿCd"Vector"ÿ*ÿÿ‚d"Layout"Nf3ÿ‚<d"CommandLine"d"Process"Ngp1c"MAIN"

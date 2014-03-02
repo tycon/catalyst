@@ -1,0 +1,2 @@
+Skeleton 5
+d2aгҐAST_CORE_STRUCTS"h1egp1c"AST_ATOMS"ac"AST_CORE"h6egp1€Cf9d"Con"дҐVar"d"Vid"дҐType"Cd"Record"d"DatatypeRhs"d"DatBind"d"TypBind"d"Longcon"CдҐLongvid"дҐConst"дҐTyvar"дҐLongstrid"дҐLayout"Nad"Fixity"и0aдҐFixop"€Г	aдҐPat"h3ad"Item"€Г	езр±гҐWRAPPED"f5C€Б€Б€В€Г€В5Nad"PrimKind"h2ad"ImportExportAttribute"€Г	ad"SymbolAttribute"€Г	Cad"Priority"€Г	aдҐExp"h2€Г+f7€Г€БC€Бd"Region"€В€В€В5Nad"Match"и±€Г+ad"EbRhs"€Жad"Dec"h2€Г+f5C€Е€Б€В!€В)€В5NN

@@ -1,0 +1,2 @@
+Skeleton 5
+ae"Tycon"i1aä¢S"gp1c"TYCON_STRUCTS"jh9egp1ÿaä¢Id"jè0gp1eÿ.åçğ±ÿ-aä¢AdmitsEquality"jÿ3gp1eÿCaä¢Kind"jÿ3gp1e"TyconKind"aä¢P"jh7aÿgp1ÿaä¢CharSize"gp1ÿ‚Caä¢IntSize"gp1ÿ‚aÿgp1ÿaä¢RealSize"gp1ÿ‚9aä¢WordSize"gp1ÿƒÿ;Ngp1e"PrimTycons"egp1ÿ9f3d"Unit"d"String"d"Trace"begp1d"Layout"f4d"Int"d"List"d"MLton"d"PropertyList"Ngp1c"TYCON"

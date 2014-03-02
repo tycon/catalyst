@@ -1,0 +1,2 @@
+Skeleton 5
+d2aã¢CIRCULAR_LIST_STRUCTS"h1aä¢Elt"gp1c"DOUBLY_LINKED"ac"CIRCULAR_LIST"h2egp1ÿf2ÿd"Pointer"

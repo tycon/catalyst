@@ -1,0 +1,2 @@
+Skeleton 5
+d2f9дўInt"d"Bool"дўList"d"Port"CдўOption"дўString"дўError"дўTrace"дўLayout"Nad"Url"jh7aдўChar"h2egp1яЃf1яaдўScheme"и0CaдўAuthority"яЃ5aдўPath"яЃ5aдўRegexp"h2езр±я‚f5CяЃяя‚	d"Save"я Cя)d"Substring"я2дўMatch"d"Promise"Nbd2я‚f1яѓf5Cяяя яЃ,я)Nf9яя‚	я я‚CяЃ,я)я:яЃ9яЃNNgp1c"URL"

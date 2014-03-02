@@ -1,0 +1,2 @@
+Skeleton 5
+d5CaеҐFixWord"i1aдҐPWord"h1eзр±гҐWORD"jh2egp1€f3d"Char"d"String"€€aдҐLargeWord"jh1egp2дҐPervasive"€Бзр±€aдҐWord"jh1egp2€Б€Б.€Б(aдҐWord8"jh1egp2€Б€В€Б(aдҐWord31"jh1egp2€Б€В€Б(CaдҐWord32"jh1egp2€Б€В:€Б(aдҐWord64"jh1egp2€Б€Г€Б(aдҐSysWord"jh1egp2€Б€Г.€Б(ad"PackWord64Big"ки0зр±гҐPACK_WORD"ad"PackWord64Little"€ДN

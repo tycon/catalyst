@@ -1,0 +1,34 @@
+(* Copyright (C) 1999-2005 Henry Cejtin, Matthew Fluet, Suresh
+ *    Jagannathan, and Stephen Weeks.
+ * Copyright (C) 1997-2000 NEC Research Institute.
+ *
+ * MLton is released under a BSD-style license.
+ * See the file MLton-LICENSE for details.
+ *)
+
+local
+  (* 
+  $(SML_LIB)/basis/mlton.mlb
+  $(SML_LIB)/basis/c-types.mlb
+  *)
+  $(SML_LIB)/smlnj-lib/Util/smlnj-lib.mlb
+  $(SML_LIB)/basis/basis.mlb
+
+  ../atoms/sources.mlb
+  ../control/sources.mlb
+  ../lib/mlton/sources.mlb
+  ../specverify/sources.mlb
+  z3_ffi.sig
+  z3_encode.sig
+  ann "allowFFI true" in
+    dylibloader.sml
+    z3_ffi.sml
+    z3_encode.fun
+  end
+  (*z3_test.sml*)
+  vcencode.sig
+  vcencode.fun
+in
+  signature VC_ENCODE
+  functor VCEncode
+end

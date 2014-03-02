@@ -1,0 +1,2 @@
+Skeleton 5
+d2aã¢EUCLIDEAN_RING_STRUCTS"h2egp1c"RING_WITH_IDENTITY"æ²ä¢Stream"ä¢Pervasive"ac"EUCLIDEAN_RING"h2egp1ÿÿ7

@@ -1,0 +1,2 @@
+Skeleton 5
+d3aã¢REGEXP_STRUCTS"è0aã¢REGEXP"h5Cegp1ÿf4d"File"ä¢String"ä¢Substring"d"Layout"aä¢Save"ÿaä¢Match"ÿaä¢Compiled"ÿNae"TestRegexp"i1aä¢S"gp1ÿjh3egp1ÿ‚egp1ÿ&f9d"Char"d"List"ÿd"Option"Cÿ2ÿ;ÿd"Assert"ÿ&Nÿ

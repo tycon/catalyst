@@ -1,0 +1,2 @@
+Skeleton 5
+d4aгўPRIM_TYCONS_SUBSTRUCTS"h6aдўAdmitsEquality"gp1c"ADMITS_EQUALITY"CaдўCharSize"gp1c"CHAR_SIZE"aдўIntSize"gp1c"INT_SIZE"aдўKind"gp1c"TYCON_KIND"aдўRealSize"gp1c"REAL_SIZE"aдўWordSize"gp1c"WORD_SIZE"Nac"PRIM_TYCONS_STRUCTS"h2езр±яf1дўLayout"aгўBINDING_STRENGTH"h0ac"PRIM_TYCONS"h3яѓ"f7яЃ;я‚CяЃ"яЃяя‚.яѓ*Nad"BindingStrength"gp1яѓ4

@@ -1,0 +1,2 @@
+Skeleton 5
+d2f1d"Word32"ac"MLTON"h5Cad"Array"gp1c"MLTON_ARRAY"ad"Exn"gp1c"MLTON_EXN"ad"GC"gp1c"MLTON_GC"ad"Itimer"gp1c"MLTON_ITIMER"ad"Platform"gp1c"MLTON_PLATFORM"Cad"ProcEnv"gp1c"MLTON_PROC_ENV"ad"Process"gp1c"MLTON_PROCESS"ad"Profile"gp1c"MLTON_PROFILE"ad"Random"gp1c"MLTON_RANDOM"ad"Rusage"gp1c"MLTON_RUSAGE"Cad"Signal"gp1c"MLTON_SIGNAL"ad"Socket"gp1c"MLTON_SOCKET"ad"TextIO"gp1c"MLTON_TEXT_IO"ad"Thread"gp1c"MLTON_THREAD"ad"Vector"gp1c"MLTON_VECTOR"N

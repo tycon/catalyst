@@ -1,0 +1,2 @@
+Skeleton 5
+d2aã¢ELABORATE_ENV_STRUCTS"h3aä¢Ast"gp1c"AST"aä¢CoreML"gp1c"CORE_ML"aä¢TypeEnv"gp1c"TYPE_ENV"ac"ELABORATE_ENV"h9egp1ÿf5Cÿd"Region"ÿÿ.d"Layout"Nad"AdmitsEquality"gp1c"ADMITS_EQUALITY"ad"Decs"gp1c"DECS"Caä¢Tycon"gp1c"TYCON"ad"Type"è0áä¢Scheme"ÿƒ)ad"Vid"ÿƒ)aä¢TypeStr"h3ad"Cons"ÿƒ)ad"Kind"gp1c"TYCON_KIND"aÿƒÿƒ)Cad"Interface"gp1c"INTERFACE"ad"Structure"ÿƒ)ad"FunctorClosure"ÿƒ)ad"InterfaceEnv"h3ÿƒ+ad"Status"ÿƒ)aÿ„ÿƒ)ad"Basis"ÿƒ)N

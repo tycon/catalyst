@@ -1,0 +1,2 @@
+Skeleton 5
+d2f7d"Out"d"List"Cä¢Justify"d"QuickSort"d"Array"ä¢Error"ä¢Relation"Nad¢RDB"jh7ad"Rep"è0aä¢Domain"ÿCaä¢Value"ÿaÿh2åçğ±ÿf8d"Int"d"Bool"d"Real"Cä¢String"ÿÿ0ÿ&ÿ8Naÿ&h3egp1ÿ&bÿ7f0f2ÿ8ÿad"Attribute"h1egp1ÿ‚ad"Heading"ÿNgp1cÿ

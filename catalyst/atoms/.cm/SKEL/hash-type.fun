@@ -1,0 +1,2 @@
+Skeleton 5
+ae"HashType"i1aдўS"gp1c"HASH_TYPE_STRUCTS"jh6egp1яCf4дўWord"дўTycon"дўTyvar"дўPropertyList"aдўType"h6bезр±дўLayout"f3дўVector"я=яЃCaдўDest"h0egp1я‚f5Cd"Bool"яЃ6дўError"дўTrace"я=CяЃдўHashSet"d"Property"яЃяЃ+NbяЃ'f3d"Int"я‚9d"Control"f5Cя6яЃ6я‚+я=яЃNNaдўOps"jh2aя=gp1я=езр±яЃgp1e"TypeOps"c2я„egp1я„f8d"Out"d"Prim"яЃCяЃ6d"Const"я‚#d"RealX"я‚+Cя=яЃd"WordX"d"WordXVector"яЃ+NNgp1c"HASH_TYPE"

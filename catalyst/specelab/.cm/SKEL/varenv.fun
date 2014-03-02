@@ -1,0 +1,2 @@
+Skeleton 5
+ae"VarEnv"i1aä¢S"gp1c"VAR_ENV_STRUCTS"jh7egp1ÿaä¢L"gp1d"Layout"Cegp1d"SpecLang"f3ÿ0d"Var"d"RefinementTypeScheme"aä¢Key"jè0gp1c"KEY"aä¢Value"jÿ9gp1c"VALUE"ad"VarMap"jh2aÿ2gp1ÿ2aÿ‚gp1ÿ‚gp1e"ApplicativeMap"Ngp1c"VAR_ENV"

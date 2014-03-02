@@ -1,0 +1,2 @@
+Skeleton 5
+d2aã¢TYPE_ENV_STRUCTS"h1egp1c"ATOMS"ac"TYPE_ENV"h5Cegp1ÿf6d"Region"Cd"RealSize"ä¢Tycon"ä¢Tyvar"d"WordSize"ä¢Layout"Naä¢Time"è0ad"Type"h2egp1c"TYPE_OPS"f7ÿ6d"Record"Cd"TypeDesc"ÿÿd"SortedRecord"ÿ+Nad"Scheme"ÿ=N

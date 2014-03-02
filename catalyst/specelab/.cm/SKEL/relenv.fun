@@ -1,0 +1,2 @@
+Skeleton 5
+ae"RelEnv"i1aä¢S"gp1c"REL_ENV_STRUCTS"jh7egp1ÿegp1d"SpecLang"Cf5Cd"Con"d"Var"d"Vector"d"RelLang"d"Layout"Nad"TyD"gp1d"TypeDesc"aä¢Key"jè0gp1c"KEY"aä¢Value"jÿ‚gp1c"VALUE"ad"RelMap"jh2aÿ‚gp1ÿ‚aÿ‚gp1ÿ‚gp1e"ApplicativeMap"Ngp1c"REL_ENV"

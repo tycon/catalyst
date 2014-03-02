@@ -1,0 +1,2 @@
+Skeleton 5
+d7aä¢Z"h1begp2d"Trace"d"Immediate"f1d"Out"aÿjgp1d"Base64"gp1e"TestBase64"Caÿjgp1d"BinarySearch"gp1e"TestBinarySearch"aÿjgp1d"Char"gp1e"TestChar"aÿjgp1d"DirectedGraph"gp1e"TestDirectedGraph"aÿjgp1d"Format"gp1e"TestFormat"aÿjgp1d"HashSet"gp1e"TestHashSet"Caÿjgp1d"Http"gp1e"TestHttp"aÿjgp1d"LinkedList"gp1e"TestLinkedList"aÿjgp1d"List"gp1e"TestList"aÿjgp1d"Process"gp1e"TestProcess"aÿjgp1d"QuickSort"gp1e"TestQuickSort"Caÿjgp1d"Regexp"gp1e"TestRegexp"aÿjgp1d"String"gp1e"TestString"aÿjgp1d"Uri"gp1e"TestUri"aÿjgp1d"Vector"gp1e"TestVector"aÿh0N

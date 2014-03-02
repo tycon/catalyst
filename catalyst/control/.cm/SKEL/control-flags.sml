@@ -1,0 +1,3 @@
+Skeleton 5
+ad"ControlFlags"jh5Caä¢C"jè0gp1e"Control"egp1ÿf8d"Int"ä¢Bits"ä¢Bool"Cd"File"ä¢List"ä¢Option"d"Regexp"d"Result"Cä¢String"d"Vector"ä¢Error"ä¢MLton"ä¢Layout"Nad"Align"ÿad"Chunk"ÿCad"Codegen"ÿad"Elaborate"h7aä¢DiagEIW"ÿaä¢DiagDI"ÿCaä¢ResolveScope"ÿaä¢Id"ÿaä¢Args"ÿbåçğ±ÿ‚f1ÿf6ÿƒ<Cd"Exn"ÿ„ÿ>d"Char"ÿCÿÿ0ÿƒ*ÿƒÿƒNNad"Format"ÿad"GcCheck"h2bÿ„f0fÿ„ad"Native"ÿCad"Profile"ÿad"ProfileIL"ÿaä¢Target"ÿaÿ†h3egp1ÿ†f3ÿ7ÿ‚ÿ‚
+ad"Size"ÿad"Verbosity"ÿNgp1c"CONTROL_FLAGS"

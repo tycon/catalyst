@@ -1,0 +1,2 @@
+Skeleton 5
+d2ac"PERVASIVE_REAL"gp1c"REAL"ad"Pervasive"h6aä¢Char"gp1ÿ.Caä¢FixedInt"gp1ÿ<aä¢IEEEReal"gp1ÿaä¢Int"gp1ÿaä¢Int31"gp1ÿ,aä¢Int32"gp1ÿ;Caä¢Int64"gp1ÿ‚aä¢IntInf"gp1ÿ‚aä¢LargeInt"gp1ÿ‚*aä¢LargeReal"gp1ÿ‚<aä¢LargeWord"gp1ÿƒCaä¢Position"gp1ÿƒ#aä¢Real"gp1ÿƒ5aä¢Real64"gp1ÿ„aä¢Word"gp1ÿ„aä¢Word8"gp1ÿ„!Caä¢Word31"gp1ÿ„1aä¢Word32"gp1ÿ…aä¢Word64"gp1ÿ…aä¢String"gp1ÿ…!aä¢SysWord"gp1ÿ…1N

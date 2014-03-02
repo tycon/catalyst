@@ -1,0 +1,2 @@
+Skeleton 5
+d2ac"AST_MODULES_STRUCTS"h1egp1c"AST_ATOMS_STRUCTS"ac"AST_MODULES"h5Cegp1c"AST_CORE"f8d"Con"дҐDec"d"Var"CдҐType"d"DatatypeRhs"d"TypBind"d"Fctid"d"Sigid"Cd"Strid"d"Tycon"дҐTyvar"дҐLongstrid"дҐLongtycon"Nad"Sigexp"h2езр±гҐWRAPPED"f5C€Б)d"Region"€В)€В=дҐLayout"NaдҐSigConst"h0ad"Equation"и±€ГCad"Spec"h2€Гf1€Г9ad"Strexp"h2€Гf2€Д€Г9ad"Strdec"h2€Гf3€Б€В1€Г9ad"FctArg"€Дad"Topdec"h2€Гf2d"Exp"€Г9N

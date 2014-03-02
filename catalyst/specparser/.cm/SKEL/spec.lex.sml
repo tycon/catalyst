@@ -1,0 +1,2 @@
+Skeleton 5
+ae"SpecLexFun"i2aä¢Tokens"gp1c"Spec_TOKENS"f1ä¢Vector"h4aä¢UserDeclarations"h1aÿgp1ÿaä¢Internal"h1aä¢StartStates"h0aä¢YYPosInt"jgp1ä¢Int"gp1c"INTEGER"bbbd2bc2egp1ÿ9egp2ÿÿ%f3ÿ‚ÿÿf2ÿ-ÿf6d"Char"Cÿ9ÿ-d"CharVector"ÿÿ6Næ0ÿƒ#

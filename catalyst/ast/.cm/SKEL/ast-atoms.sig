@@ -1,0 +1,2 @@
+Skeleton 5
+d2aгҐAST_ATOMS_STRUCTS"h4aдҐRecord"зр±гҐRECORD"aдҐSortedRecord"€#aдҐSymbol"gp1c"SYMBOL"aдҐTyvar"gp1c"TYVAR"ac"AST_ATOMS"h6egp1€Cf6€Cd"Region"€Б€Б€0дҐLayout"Nad"Const"gp1c"AST_CONST"aдҐTycon"h2езр±гҐAST_ID"egp1c"PRIM_TYCONS"aдҐVar"€ГaдҐCon"h2€Гegp1c"PRIM_CONS"Cad"Basid"€Гad"Sigid"€Гad"Strid"€Гad"Fctid"€Гad"Vid"h2€Гf2€Г.€Г$Cad"Longtycon"h1езр±гҐLONGID"ad"Longvar"€ЕaдҐLongcon"€Еad"Longstrid"€Еad"Longvid"h2€Еf1€Е:Cad"Type"h2езр±гҐWRAPPED"f4€В:€Б€0€Вad"TypBind"и≤€Ж7ж±€Вad"DatBind"€Зad"DatatypeRhs"€Зad"ModIdBind"€ЗN

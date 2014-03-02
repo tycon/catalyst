@@ -1,0 +1,2 @@
+Skeleton 5
+ae"ForestHeap"i1aä¢S"gp1c"FOREST_HEAP_STRUCTS"jh7egp1ÿf3ä¢Int"ä¢Key"ä¢Pointer"Caä¢Elt"h0aä¢CircList"jh1aÿjçğ±ÿgp1e"DoublyLinked"gp1e"CircularList"aÿh2eÿ-f3ÿÿ?ÿbd2ad"I"gp1ÿ9begp±ä¢Real"fÿ‚<f3ÿÿd"Array"f6ÿCÿ?d"List"ÿd"Error"ÿNNgp1c"FOREST_HEAP"

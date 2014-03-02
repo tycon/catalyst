@@ -1,0 +1,2 @@
+Skeleton 5
+d2aã¢ORDERED_RING_STRUCTS"h2egp1c"RING_WITH_IDENTITY"f1d"Relation"ac"ORDERED_RING"h1egp1ÿ

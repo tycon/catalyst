@@ -1,0 +1,2 @@
+Skeleton 5
+d2aеўFixWord"i2aдўW"gp1c"PERVASIVE_WORD"f1яh1bd3aдўLargeWord"gp2дўPervasive"я2aдўWord"gp2яЃяЃaдўWord8"зрІяЃяЃ!f6яCd"Byte"яЃя2яЃ!d"Layout"NaяЃ!jh4eяЃ)aдўZ"jяЃ)gp1яegp1я‚f2d"CharVector"яЃh1egp1c"WORD"

@@ -1,0 +1,2 @@
+Skeleton 5
+d2aã¢ELABORATE_VAR_ENV_STRUCTS"h2aä¢SpecLang"gp1c"SPEC_LANG"aä¢ANormalCoreML"gp1c"A_NORMAL_CORE_ML"ac"ELABORATE_VAR_ENV"h4egp1ÿf2ÿ=ÿ"ad"VE"gp1c"VAR_ENV"ad"RE"gp1c"REL_ENV"

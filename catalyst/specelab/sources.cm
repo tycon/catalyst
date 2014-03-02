@@ -1,0 +1,30 @@
+(* Copyright (C) 1999-2005 Henry Cejtin, Matthew Fluet, Suresh
+ *    Jagannathan, and Stephen Weeks.
+ * Copyright (C) 1997-2000 NEC Research Institute.
+ *
+ * MLton is released under a BSD-style license.
+ * See the file MLton-LICENSE for details.
+ *)
+
+Group
+  signature APPLICATIVE_MAP
+  functor ApplicativeMap
+  signature VAR_ENV
+  signature REL_ENV
+  signature ELABORATE_VAR_ENV
+  functor ElaborateVarEnv
+
+is
+   ../atoms/sources.cm
+   ../control/sources.cm
+   ../lib/mlton/sources.cm
+   ../speclang/sources.cm
+   ../core-ml/sources.cm
+  map.sig
+  map.fun
+  varenv.sig
+  varenv.fun
+  relenv.sig
+  relenv.fun
+  elaborate_varenv.sig
+  elaborate_varenv.fun
