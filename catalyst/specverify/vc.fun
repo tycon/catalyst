@@ -5,6 +5,7 @@ struct
   structure P = Predicate
   structure BP = Predicate.BasePredicate
   structure RP = Predicate.RelPredicate
+  structure RelId = RelLang.RelId
   structure RefTy = RefinementType
   structure RefTyS = RefinementTypeScheme
   structure RelTy = RelLang.RelType
@@ -162,7 +163,9 @@ struct
         end
     in
       case refTy of
-        Base (bv,td,pred) => 
+        (* removing any _mark_ *)
+        Base (_,TyD.Tunknown,_) => Vector.new0 ()
+      | Base (bv,td,pred) => 
           let
             val pred' = P.applySubst (v,bv) pred
             val vcs = havocPred pred'
@@ -260,7 +263,12 @@ struct
              * Typecheck results modulo argvar
              *)
             val t12' = RefTy.applySubsts (Vector.new1 (arg2,arg1)) t12
-            val vcs2 = fromTypeCheck (ve,t12',t22)
+            (*
+             * Extend the environment with type for arg2
+             *)
+            val ve'  = VE.add ve (arg2, RefTyS.generalize 
+              (Vector.new0 (), t21))
+            val vcs2 = fromTypeCheck (ve',t12',t22)
           in
             Vector.concat [vcs1, vcs2]
           end
@@ -325,8 +333,10 @@ struct
           fun tyArgsinTypeOf (v:Var.t) =
             (case TyDBinds.find tyDB v of
               TyD.Tconstr (tycon,targs) => Vector.fromList targs
-            | _ => Error.bug ("Relation instantiated over variable\
-              \ of non-algebraic datatype")) 
+              (* Hack : special case to deal with 'R *)
+            | t => Vector.new1 t)
+            (*| _ => Error.bug ("Relation instantiated over variable\
+              \ of non-algebraic datatype")) *)
             handle TyDBinds.KeyNotFound _ => Error.bug ("Type of\
               \ variable "^(Var.toString v)^" not found in TyDBinds")
         in
@@ -337,7 +347,16 @@ struct
           | RelLang.D t => mapSnd RelLang.D (mapper t)
           | RelLang.R (relId,v) => 
             let
-              val rinst = (relId,tyArgsinTypeOf v)
+              val relIdStr = RelId.toString relId
+              val dTyInsts = tyArgsinTypeOf v
+              (* Hack : to deal with 'R *)
+              val rTyInsts = fn _ => tyArgsinTypeOf $ 
+                Var.fromString "l"
+              val rinst = case relIdStr = "qRm" orelse 
+                relIdStr = "qRo" of
+                  false => (relId,dTyInsts)
+                | true => (relId, Vector.concat [dTyInsts, 
+                    rTyInsts ()])
             in
               case getSymForRInst rinst of 
                 SOME relId' => (tab,RelLang.R (relId',v))

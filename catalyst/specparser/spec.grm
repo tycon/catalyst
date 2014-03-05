@@ -78,10 +78,14 @@ infixr 5 $
   | elemseq of elem list
   | typespec of TypeSpec.t 
   | refty of RefinementType.t
-  | reftyseq of RefinementType.t list
+  | reftyatom of RefinementType.t 
+  | vartyatom of Var.t * RefinementType.t 
+  | vartyseq of (Var.t * RefinementType.t) list
+  | varty of Var.t * RefinementType.t 
+  (*| reftyseq of RefinementType.t list
   | vartyatom of Var.t * RefinementType.t
   | vartyatomseq of (Var.t * RefTy.t) list
-  | tyatom of RefinementType.t
+  | tyatom of RefinementType.t *)
   | basety of RefinementType.t
   | pred of Predicate.t
   | relpred of Predicate.RelPredicate.t
@@ -155,25 +159,35 @@ elem : INT (Int(INT))
 typespec : ASSUME ID COLON refty (TypeSpec.T (true,(Var.fromString ID),refty))
          | ID COLON refty (TypeSpec.T (false,(Var.fromString ID),refty))
 
-(* alphaRename tyatom to avoid name clashes *)
-refty : tyatom (case tyatom of RefTy.Base _ => RefTy.alphaRename tyatom
-                    | _ => tyatom)
-      | vartyatom ARROW refty (RefinementType.Arrow(vartyatom,refty))
+(* From param-devel *)
+refty : reftyatom (reftyatom)
+      | vartyatom ARROW refty (RefTy.Arrow (vartyatom, refty))
 
-vartyatom : tyatom (let open RefTy in case tyatom of 
-                      Base (v,_,_) => (v,alphaRename tyatom)
-                    | Tuple _ => (genVar (),tyatom)
-                    | Arrow _ => (genVar (),tyatom)
-                    end)
+reftyatom : basety (basety)
+          | LPAREN vartyseq RPAREN  (case vartyseq of
+                          [(v, refty as RefTy.Base _)] => 
+                              RefTy.alphaRenameToVar refty v
+                        | [(v,refty)] => refty
+                        | _ => RefTy.Tuple (Vector.fromList vartyseq))
 
-vartyatomseq : vartyatom ([vartyatom])
-             | vartyatom COMMA vartyatomseq (vartyatom ::
-                  vartyatomseq)
+vartyatom : basety (case basety of 
+                      RefTy.Base (v,_,_) => (v,RefTy.alphaRename basety)
+                    | _ => Error.bug "Impossible case of basety")
+          | LPAREN vartyseq RPAREN  (case vartyseq of
+                          [x] => x 
+                        | _ => (genVar (), RefTy.Tuple 
+                            (Vector.fromList vartyseq)))
 
-tyatom : basety (basety)
-       | LPAREN vartyatomseq RPAREN (case vartyatomseq of 
-                  [(v,refty)] => refty
-                | _ => RefTy.Tuple (Vector.fromList vartyatomseq))
+vartyseq : varty ([varty])
+         | varty COMMA vartyseq (varty :: vartyseq)
+
+varty : refty (let open RefTy in case refty of 
+                          Base (v,_,_) => (v,alphaRename refty)
+                        | Tuple _ => (genVar (),refty)
+                        | Arrow _ => (genVar (),refty)
+                        end)
+
+
 
 (* Needs extension to specify ML type *)
 basety : ID (RefinementType.Base ((Var.fromString ID), 

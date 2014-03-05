@@ -354,6 +354,10 @@ struct
             Predicate.layout pred, L.str "}"]
         | Tuple tv => L.vector $ Vector.map (tv, fn (v,t) => 
             L.seq [L.str $ Var.toString v, L.str ":", layout t])
+        | Arrow ((v1,t1 as Arrow _),t2) => L.align $ L.separateLeft (
+            [L.seq [L.str "(", L.str $ Var.toString v1, L.str ":",
+              layout t1, L.str ")"], 
+            layout t2]," -> ")
         | Arrow ((v1,t1),t2) => L.align $ L.separateLeft (
             [L.seq [L.str $ Var.toString v1, L.str ":", layout t1], 
             layout t2]," -> ")

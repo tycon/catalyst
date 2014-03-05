@@ -8,6 +8,7 @@ struct
   structure RE = RelEnv (structure SpecLang = SpecLang)
   structure TyD = TypeDesc
   structure TyDB = TyDBinds
+  structure RelId = RelLang.RelId
   structure RelTy = RelLang.RelType
   structure RelTyS = RelLang.RelTypeScheme
   structure RefTy = RefinementType
@@ -20,6 +21,27 @@ struct
   val assert = Control.assert
   fun $ (f,arg) = f arg
   infixr 5 $
+
+  fun bootStrapFreeRels (re : RE.t) =
+    let
+      val splRelId1 = RelId.fromString "qRm"
+      val splRelId2 = RelId.fromString "qRo"
+      val domainTyvar = Tyvar.newNoname {equality = false}
+      val rangeTyvar = Tyvar.newNoname {equality = false}
+      val relTy1 = RelTy.Tuple $ Vector.new2 
+        (TyD.makeTvar domainTyvar, TyD.makeTvar rangeTyvar)
+      val relTyS1 = RelTyS.generalize (Vector.new2 (domainTyvar,
+        rangeTyvar), relTy1)
+      val map = Vector.new0 ()
+      val re = RE.add re (splRelId1, {ty=relTyS1, map=map})
+      val relTy2 = RelTy.Tuple $ Vector.new3 
+        (TyD.makeTvar domainTyvar, TyD.makeTvar rangeTyvar,
+         TyD.makeTvar rangeTyvar)
+      val relTyS2 = RelTyS.generalize (Vector.new2 (domainTyvar,
+        rangeTyvar), relTy2)
+    in
+      RE.add re (splRelId2, {ty=relTyS2, map=map})
+    end
 
   fun bootStrapBools (ve: VE.t) = 
     let
@@ -232,7 +254,11 @@ struct
         case dec of Dec.Datatype datbinds => Vector.fold (datbinds, ve,
           fn (datbind,ve)   => elabDatBind ve datbind) 
           | _ => ve)
-      val elabRE = Vector.fold (reldecs, RE.empty, 
+      (*
+       * More dirty hacks!
+       *)
+      val initialRE = bootStrapFreeRels RE.empty
+      val elabRE = Vector.fold (reldecs, initialRE,
         fn(StructuralRelation.T srbind,re) => elabSRBind re initialVE srbind)
       val refinedVE = Vector.fold (RE.toVector elabRE, initialVE, 
         fn ((id,{ty,map}),ve) => Vector.fold (map, ve, 

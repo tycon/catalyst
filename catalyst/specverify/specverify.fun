@@ -115,7 +115,9 @@ struct
             in
               (Vector.new0 (), newArgBind)
             end
-        | _ => raise Fail $ "Types Merge Error"
+        | _ => Error.bug ("Types Merge Error. Cannot merge\n"
+          ^ "1. "^(L.toString $ RefTy.layout refTy)^", \n"
+          ^ "2. "^(TyD.toString tyd)^"\n")
       val (_,(_,refTy')) = doMerge tyd (genVar (), refTy)
     in
       refTy'

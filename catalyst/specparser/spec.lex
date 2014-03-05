@@ -11,6 +11,7 @@ val debug = fn s => if (!debugFlag) then print s else ()
   Spec_TOKENS defined using term declaration in grm
 *)
 %%
+%s COMMENT;
 %header (functor SpecLexFun (structure Tokens : Spec_TOKENS));
 alpha=[A-Za-z];
 digit=[0-9];
@@ -49,6 +50,11 @@ ws=[\ \t];
 <INITIAL>("[") => (debug "lbrace\n"; Tokens.LBRACE(!line,yypos));
 <INITIAL>("]") => (debug "rbrace\n"; Tokens.RBRACE(!line,yypos));
 <INITIAL>("->") => (debug "arrow\n"; Tokens.ARROW(!line,yypos));
+<INITIAL>("(*") => (debug "comment begin\n"; YYBEGIN COMMENT; continue ());
+<COMMENT>. => (continue());
+<COMMENT>{ws}+ => (continue());
+<COMMENT>{eol} => (line := (!line)+1; continue());
+<COMMENT>("*)") => (debug "comment end\n"; YYBEGIN INITIAL; continue ());
 <INITIAL>("|") => (debug "pipe\n"; Tokens.PIPE(!line,yypos));
 <INITIAL>{variable} => (debug ("var: "^yytext^"\n"); Tokens.ID(yytext,!line,yypos));
 <INITIAL>{number} => (debug ("int: "^yytext^"\n"); 

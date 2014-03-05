@@ -1,6 +1,7 @@
 Catalyst
 ========
-Relspec implementation
+A relational specification framework implemented as a 
+dependent type system for ML.
 
 
 To Run
@@ -32,4 +33,12 @@ To Compile
 You need MLton Standard ML compiler.
 
     mlton make.mlb
+
+Misc
+====
+The current version of Catalyst is not optimized for performance.
+Nevertheless, in our benchmarks, almost 90% of Catalyst's run-time is
+spent in MLton's native parseAndElaborate pass. With verbose option
+enabled, Catalyst displays time spent in various passes, including
+MLton passes. 
 
