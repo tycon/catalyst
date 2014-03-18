@@ -43,7 +43,12 @@ sig
       mkIff : assertion * assertion -> assertion,
       mkAnd : assertion vector -> assertion,
       mkOr : assertion vector -> assertion,
-      dischargeAssertion :  assertion -> unit
+      dischargeAssertion :  assertion -> unit,
+      (* -- Bind APIs -- *)
+      mkQStrucRelApp : struc_rel -> set,
+      mkQCrossPrd : set vector -> set,
+      mkBind : set * set -> set,
+      assertBindEq : set * set -> unit
     }
   val checkContext : context -> int
   val delContext : context -> unit

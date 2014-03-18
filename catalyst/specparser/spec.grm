@@ -13,6 +13,7 @@ val genVar = fn _ =>
     Var.fromString id 
   end
 fun $ (f,arg) = f arg
+val empty = fn _ => Vector.new0 ()
 infixr 5 $
 %%
 (* ML Yacc Declarations *)
@@ -60,18 +61,24 @@ infixr 5 $
       | PIPE
       | ID of string
       | INT of int
+      | UINST
       | EOF
 
 %nonterm start of RelSpec.t
   | spec of RelSpec.t
   | decsandtys of RelSpec.t
   | reldec of StructuralRelation.t
+  | params of RelId.t list
+  | paramseq of RelId.t list
   | patmatchseq of (Con.t * Var.t vector option * term) list
   | patmatch of Con.t * Var.t vector option * term
   | conpat of Con.t * Var.t vector option
   | conargs of Var.t vector
   | idseq of Var.t list
   | rterm of term
+  | instexpr of instexpr
+  | instexprs of instexpr list
+  | varid of Var.t
   | rexpr of expr
   | ratom of expr
   | elem of elem
@@ -82,10 +89,6 @@ infixr 5 $
   | vartyatom of Var.t * RefinementType.t 
   | vartyseq of (Var.t * RefinementType.t) list
   | varty of Var.t * RefinementType.t 
-  (*| reftyseq of RefinementType.t list
-  | vartyatom of Var.t * RefinementType.t
-  | vartyatomseq of (Var.t * RefTy.t) list
-  | tyatom of RefinementType.t *)
   | basety of RefinementType.t
   | pred of Predicate.t
   | relpred of Predicate.RelPredicate.t
@@ -94,6 +97,7 @@ infixr 5 $
   | patom of Predicate.t
 %verbose
 %pure
+%left UINST
 
 %%
 (* BNF Rules *)
@@ -114,17 +118,35 @@ decsandtys : reldec SEMICOLON decsandtys
 
 reldec : RELATION ID patmatchseq 
           (StructuralRelation.T {id=RelId.fromString ID,
+                params = empty (),
                 map = Vector.fromList patmatchseq})
-       | RELATION ID EQUALOP rterm
+       | RELATION LPAREN ID params RPAREN patmatchseq 
+          (StructuralRelation.T {id=RelId.fromString ID,
+                params = Vector.fromList params,
+                map = Vector.fromList patmatchseq})
+       | RELATION ID EQUALOP instexpr STAR
           (StructuralRelation.T{id=RelId.fromString ID,
-                map = Vector.fromList [(defaultCons,NONE,rterm)]})
+                params = empty (),
+                map = Vector.fromList [(defaultCons,NONE,
+                  Star instexpr)]})
+       | RELATION LPAREN ID params RPAREN EQUALOP instexpr STAR
+          (StructuralRelation.T{id=RelId.fromString ID,
+                params = Vector.fromList params,
+                map = Vector.fromList [(defaultCons,NONE,
+                  Star instexpr)]})
+
+params : ID ([RelId.fromString ID])
+       | ID params ((RelId.fromString ID)::params)
+
+paramseq : ID ([RelId.fromString ID])
+       | ID COMMA paramseq ((RelId.fromString ID)::paramseq)
 
 patmatchseq : patmatch PIPE patmatchseq (patmatch :: patmatchseq)
             | patmatch ([patmatch])
 
-patmatch : LPAREN conpat RPAREN EQUALOP rterm 
-              (case conpat of (c,vlop) => (c,vlop,rterm))
-         | ID EQUALOP rterm ((Con.fromString ID,NONE,rterm))
+patmatch : LPAREN conpat RPAREN EQUALOP rexpr 
+              (case conpat of (c,vlop) => (c, vlop, Expr rexpr))
+         | ID EQUALOP rexpr ((Con.fromString ID, NONE, Expr rexpr))
 
 conpat :  ID (Con.fromString ID, NONE)
        |  ID conargs (Con.fromString ID, SOME conargs)
@@ -135,8 +157,16 @@ conargs : ID (Vector.fromList [Var.fromString ID])
 idseq : ID ([Var.fromString ID])
       | ID COMMA idseq ((Var.fromString ID)::idseq)
 
-rterm : ID STAR (Star(RelId.fromString ID))
-     | rexpr (Expr(rexpr))
+instexpr : ID (RInst { sargs = empty (), 
+                targs = empty(), args = empty (), 
+                rel = RelId.fromString ID})
+         | ID instexprs (RInst {
+                sargs = empty (), targs = empty(),
+                args = Vector.fromList instexprs, 
+                rel = RelId.fromString ID})
+
+instexprs : LBRACE instexpr RBRACE ([instexpr])
+          | LBRACE instexpr RBRACE instexprs (instexpr :: instexprs)
 
 rexpr : ratom CROSSPRD rexpr (X(ratom,rexpr))
       | ratom UNION rexpr (U(ratom,rexpr))
@@ -145,7 +175,7 @@ rexpr : ratom CROSSPRD rexpr (X(ratom,rexpr))
 
 ratom : LCURLY LPAREN RPAREN RCURLY (T(Vector.fromList []))
       | LCURLY LPAREN elemseq RPAREN RCURLY (T(Vector.fromList elemseq))
-      | ID LPAREN ID RPAREN (R(RelId.fromString ID1, Var.fromString ID2))
+      | instexpr LPAREN ID RPAREN (R (instexpr, Var.fromString ID))
       | LPAREN rexpr RPAREN (rexpr)
 
 elemseq : elem ([elem])
@@ -156,10 +186,20 @@ elem : INT (Int(INT))
      | FALSE (Bool(false))
      | ID (Var(Var.fromString ID))
 
-typespec : ASSUME ID COLON refty (TypeSpec.T (true,(Var.fromString ID),refty))
-         | ID COLON refty (TypeSpec.T (false,(Var.fromString ID),refty))
+typespec : ASSUME ID COLON refty (TypeSpec.T {isAssume = true,
+                                              name = (Var.fromString ID),
+                                              params = empty (),
+                                              refty = refty})
+         | ID COLON refty (TypeSpec.T {isAssume = false,
+                                       name = (Var.fromString ID),
+                                       params = empty (),
+                                       refty = refty})
+         | LPAREN paramseq RPAREN ID COLON refty (
+                    TypeSpec.T {isAssume = false,
+                                name = Var.fromString ID,
+                                params = Vector.fromList paramseq, 
+                                refty = refty})
 
-(* From param-devel *)
 refty : reftyatom (reftyatom)
       | vartyatom ARROW refty (RefTy.Arrow (vartyatom, refty))
 
@@ -199,7 +239,6 @@ basety : ID (RefinementType.Base ((Var.fromString ID),
        | LCURLY ID PIPE pred RCURLY (RefinementType.Base ((Var.fromString ID), 
                 TypeDesc.makeTunknown(), pred))
 
-(* Needs extension for base predicates *)
 (* (v=true) => (not ('R1(x)= Rnull(x))) /\
    (v=false) => ('R2(x) = Rnull)*)
 pred :  patom (patom)

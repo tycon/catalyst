@@ -5,12 +5,16 @@ struct
   structure P = Predicate
   structure BP = Predicate.BasePredicate
   structure RP = Predicate.RelPredicate
-  structure RelId = RelLang.RelId
+  structure RelId = RelId
+  structure TS = TupSort
+  structure SPS = SimpleProjSort
+  structure PSS = ProjSortScheme
+  structure PTS = ProjTypeScheme
   structure RefTy = RefinementType
+  structure PRf = ParamRefType
+  structure RefSS = RefinementSortScheme
   structure RefTyS = RefinementTypeScheme
-  structure RelTy = RelLang.RelType
-  structure RelTyS = RelLang.RelTypeScheme
-  structure RI = RelLang.RelId
+  structure RI = RelId
   structure TyD = TypeDesc
   structure Env = TyDBinds
   structure L = Layout
@@ -19,6 +23,7 @@ struct
 
   type tydbind = Var.t * TyD.t
   type tydbinds = tydbind vector
+  type bindings = {tbinds:tydbinds, rbinds:PRE.t}
 
   datatype simple_pred = True
                        | False
@@ -32,9 +37,11 @@ struct
                    |  Disj of vc_pred vector
                    |  Not of vc_pred
 
-  datatype t = T of tydbinds * vc_pred * vc_pred
+  datatype t = T of bindings * vc_pred * vc_pred
   
   val assert = Control.assert
+  val empty = fn _ => Vector.new0 ()
+  val len = Vector.length
   fun $ (f,arg) = f arg
   infixr 5 $
   fun vectorAppend (vec,e) = Vector.concat [vec,Vector.new1 e]
@@ -191,9 +198,10 @@ struct
        * Remove polymorphic functions and constructors
        *)
       val vevec = Vector.keepAllMap (VE.toVector ve,
-        fn (v,RefTyS.T{tyvars,refty,...}) => case Vector.length tyvars of
-            0 =>  SOME (v,refty)
-          | _ => NONE)
+        fn (v,RefTyS.T{tyvars, refss, ...}) => 
+          case Vector.length tyvars of
+              0 =>  SOME (v,RefSS.toRefTy refss)
+            | _ => NONE)
       (*
        * Remove true and false constructors
        *)
@@ -208,7 +216,7 @@ struct
       havocTyBindSeq vevec
     end
 
-  fun fromTypeCheck (ve, subTy, supTy) : t vector = 
+  fun fromTypeCheck (ve, pre, subTy, supTy) : t vector = 
     let
       open RefTy
     in
@@ -236,7 +244,7 @@ struct
              * Third, add base type of actuals to env
              *)
             val ve = VE.add ve (v1,RefTyS.generalize (Vector.new0 (),
-              RefTy.fromTyD t1))
+              RefSS.fromRefTy $ RefTy.fromTyD t1))
             val envVCs = fn _ => havocVE ve
             val anteVCs = fn _ => havocPred p1
             val vcs = fn _ => join (envVCs (),anteVCs ())
@@ -248,17 +256,18 @@ struct
                 (vcs(), conseqPs(), [],
                   fn ((tybinds,anteP),conseqP,vcacc) =>
                     case anteP of Simple False => vcacc
-                    | _ => (T (tybinds,anteP,conseqP))::vcacc)
+                    | _ => (T ({tbinds=tybinds, rbinds=pre}, 
+                        anteP, conseqP))::vcacc)
           end
       | (Tuple t1v,Tuple t2v) => 
           (*
            * Unimpl: records
            *)
           (Vector.concatV o Vector.map2) (t1v,t2v, 
-            fn ((v1,t1),(v2,t2)) => fromTypeCheck (ve,t1,t2))
+            fn ((v1,t1),(v2,t2)) => fromTypeCheck (ve,pre,t1,t2))
       | (Arrow ((arg1,t11),t12),Arrow ((arg2,t21),t22)) => 
           let
-            val vcs1 = fromTypeCheck (ve,t21,t11)
+            val vcs1 = fromTypeCheck (ve,pre,t21,t11)
             (*
              * Typecheck results modulo argvar
              *)
@@ -267,45 +276,68 @@ struct
              * Extend the environment with type for arg2
              *)
             val ve'  = VE.add ve (arg2, RefTyS.generalize 
-              (Vector.new0 (), t21))
-            val vcs2 = fromTypeCheck (ve',t12',t22)
+              (Vector.new0 (), RefSS.fromRefTy t21))
+            val vcs2 = fromTypeCheck (ve',pre,t12',t22)
           in
             Vector.concat [vcs1, vcs2]
           end
     end handle TrivialVC => Vector.new0 ()
 
-  datatype rinst = RInst of RelLang.RelId.t * TypeDesc.t vector
+  (* -- VC Elaboration -- *)
+  (*
+   * This rinst has relIds as its arguments.
+   *)
+  datatype rinst = RInst of {targs : TypeDesc.t vector,
+                             sargs : TS.t vector,
+                             rargs : RelId.t vector,
+                             rel : RelId.t}
+  type rsorted = {rel:RelId.t, sort : SPS.t}
 
   structure RelInstTable : APPLICATIVE_MAP where
-    type Key.t = rinst and type Value.t = RelLang.RelId.t =
+    type Key.t = rinst and type Value.t = rsorted =
   struct
     structure Key = 
     struct
       type t = rinst
-      val layout = fn _ => L.empty
+      val len = Vector.length
+      val layout = fn (RInst {targs,sargs,rargs,rel}) => L.str $ 
+        RelLang.ieToString $ RelLang.RInst {targs=targs, sargs=sargs,
+          args=Vector.map (rargs,RelLang.instOfRel), rel=rel}
       val idStrEq = fn (id1,id2) => (RI.toString id1 = RI.toString id2)
-      fun equal (RInst (id1,tyds1), RInst (id2,tyds2)) =
+      fun equal (RInst {rel=id1, targs=targs1, 
+                        sargs=sargs1, rargs=rargs1}, 
+                 RInst {rel=id2, targs=targs2, 
+                        sargs=sargs2, rargs=rargs2}) =
         let
-          val eq = (idStrEq (id1,id2)) andalso
-              (Vector.length tyds1 = Vector.length tyds2) andalso
-              (Vector.forall2 (tyds1,tyds2, TyD.sameType))
+          val eq = (RI.equal (id1,id2)) andalso
+              (len targs1 = len targs2) andalso
+              (Vector.forall2 (targs2,targs1, TyD.sameType)) andalso
+              (len sargs1 = len sargs2) andalso
+              (Vector.forall2 (sargs2,sargs1, TS.equal)) andalso
+              (len sargs1 = len sargs2) andalso
+              (Vector.forall2 (sargs2,sargs1, TS.equal)) andalso
+              (len rargs1 = len rargs2) andalso
+              (Vector.forall2 (rargs2,rargs1, RI.equal))
         in
           eq
         end
         
     end
+    structure Value =
+    struct
+      type t = rsorted
+      fun layout {rel,sort} = L.str $ (RI.toString rel) ^"::" 
+        ^(SPS.toString sort) 
+    end
     structure Map = ApplicativeMap (structure Key = Key
-                                   structure Value = RelLang.RelId)
+                                   structure Value = Value)
     open Map
   end
 
-  fun elaborate (re,vc) =
+  structure RIT = RelInstTable
+
+  fun elaborate (re,pre,vc) =
     let
-      val T (tydbinds,anteP,conseqP) = vc
-
-      val tyDB = Vector.fold (tydbinds,TyDBinds.empty, 
-        fn ((v,tyd),tyDB) => TyDBinds.add tyDB v tyd)
-
       val count = ref 0
       val genSym = fn idbase => 
         let
@@ -316,59 +348,101 @@ struct
           RI.fromString id 
       end
       val inv = fn (x,y) => (y,x)
+      val fst = fn (x,y) => x
+      val snd = fn (x,y) => y
       fun mapFoldTuple b f (x,y) =
         ((fn (b',x') => 
             ((fn (b'',y') => (b'',(x',y'))) o (f b')) y) 
           o (f b)) x 
       fun mapSnd f (x,y) = (x,f y)
 
-      fun elabRExpr (tab:RelInstTable.t) rexpr =  
+      val T ({tbinds=tydbinds, rbinds},anteP,conseqP) = vc
+
+      val tyDB = Vector.fold (tydbinds,TyDBinds.empty, 
+        fn ((v,tyd),tyDB) => TyDBinds.add tyDB v tyd)
+
+      val initRIT = Vector.fold (PRE.toVector rbinds, RIT.empty, 
+        fn ((r,{ty,...}),rit) =>
+          let
+            val PTS.T {sortscheme=PSS.T {sort = ProjSort.T {sort, 
+              ...} , ...}, ...} = ty
+            val value = {rel=r,sort=sort}
+            val key = RInst {rel=r, targs=empty(), sargs=empty(),
+              rargs=empty()}
+          in
+            (*
+             * A rel-param is its own instantiation
+             *)
+            RIT.add rit key value
+          end)
+
+      fun getSymForRInst rit rinst = 
+        (SOME $ #rel $ RIT.find rit rinst) 
+          handle RIT.KeyNotFound _ => NONE
+
+      exception Return of (RIT.t * RI.t)
+      fun doItIE (ie as RelLang.RInst {targs,sargs,args,rel}) rit 
+          : (RIT.t * RI.t) =
         let
-          fun getSymForRInst rinst = 
-            (SOME $ RelInstTable.find tab (RInst rinst)) 
-              handle RelInstTable.KeyNotFound _ => NONE
-          fun addSymForRInst rinst rid =
-            RelInstTable.add tab (RInst rinst) rid
-          val mapper = mapFoldTuple tab elabRExpr
-          fun tyArgsinTypeOf (v:Var.t) =
-            (case TyDBinds.find tyDB v of
-              TyD.Tconstr (tycon,targs) => Vector.fromList targs
-              (* Hack : special case to deal with 'R *)
-            | t => Vector.new1 t)
-            (*| _ => Error.bug ("Relation instantiated over variable\
-              \ of non-algebraic datatype")) *)
-            handle TyDBinds.KeyNotFound _ => Error.bug ("Type of\
-              \ variable "^(Var.toString v)^" not found in TyDBinds")
+          val (syms,rit') = Vector.mapAndFold (args,rit,
+            fn (ie,rit) => inv $ doItIE ie rit) 
+          val rinst = RInst {targs=targs, sargs=sargs, rargs=syms,
+              rel=rel}
+          val _ = case getSymForRInst rit' rinst of NONE => ()
+            | SOME rel' => raise (Return (rit',rel'))
+          val rel' = genSym rel
+          val len = Vector.length
+          val err = fn _ => Error.bug $ 
+            "Unknown rel "^(RI.toString rel)
+          (* Obs : Pulling #ty out of case fails typecheck *)
+          val relTyS = ((case len args of 
+            0 => (#ty $ RE.find re rel) 
+          | _ => (#ty $ PRE.find pre rel)) handle 
+            PRE.ParamRelNotFound _ => err() ) handle 
+            RE.RelNotFound _ => err()
+          (*
+          val _ = print "instexpr:\n"
+          val _ = print $ RelLang.ieToString ie
+          val _ = print "\nPTS:\n"
+          val _ = print $ PTS.toString relTyS
+          val _ = print "\n"
+          *)
+          val relSS = PTS.instantiate (relTyS,targs)
+          val ProjSort.T {sort, ...} = PSS.instantiate (relSS,sargs)
+          val rit'' = RIT.add rit' rinst {rel=rel',sort=sort}
+        in
+          (rit'',rel')
+        end handle (Return a) => a
+
+      fun doItRExpr (rit:RelInstTable.t) rexpr
+        : (RIT.t * RelLang.expr) =
+        let
+          val g = mapFoldTuple rit doItRExpr
         in
           case rexpr of
-            RelLang.T _ => (tab,rexpr)
-          | RelLang.X t => mapSnd RelLang.X (mapper t)
-          | RelLang.U t => mapSnd RelLang.U (mapper t)
-          | RelLang.D t => mapSnd RelLang.D (mapper t)
-          | RelLang.R (relId,v) => 
+            RelLang.T _ => (rit,rexpr)
+          | RelLang.X t => mapSnd RelLang.X (g t)
+          | RelLang.U t => mapSnd RelLang.U (g t)
+          | RelLang.D t => mapSnd RelLang.D (g t)
+          | RelLang.R (ie,v) => 
             let
-              val relIdStr = RelId.toString relId
-              val dTyInsts = tyArgsinTypeOf v
-              (* Hack : to deal with 'R *)
-              val rTyInsts = fn _ => tyArgsinTypeOf $ 
-                Var.fromString "l"
-              val rinst = case relIdStr = "qRm" orelse 
-                relIdStr = "qRo" of
-                  false => (relId,dTyInsts)
-                | true => (relId, Vector.concat [dTyInsts, 
-                    rTyInsts ()])
+              val (rit',newRel) = doItIE ie rit
+              (*
+               * Obs: We would ideally like to have a modified
+               * instexpr type which is just RI.t. However, this
+               * requires entirely new SpecLang. 
+               *)
+              val ie' = RelLang.RInst {targs=empty(), sargs=empty(),
+                args=empty(), rel=newRel}
             in
-              case getSymForRInst rinst of 
-                SOME relId' => (tab,RelLang.R (relId',v))
-              | NONE => (fn r' => (addSymForRInst rinst r', 
-                  RelLang.R (r',v))) (genSym relId)
+              (rit', RelLang.R (ie',v))
             end
         end
 
       fun elabRPred (tab : RelInstTable.t) rpred = case rpred of
-          RP.Eq t => mapSnd RP.Eq (mapFoldTuple tab elabRExpr t)
-        | RP.Sub t => mapSnd RP.Sub (mapFoldTuple tab elabRExpr t)
-        | RP.SubEq t => mapSnd RP.SubEq (mapFoldTuple tab elabRExpr t)
+          RP.Eq t => mapSnd RP.Eq (mapFoldTuple tab doItRExpr t)
+        | RP.Sub t => mapSnd RP.Sub (mapFoldTuple tab doItRExpr t)
+        | RP.SubEq t => mapSnd RP.SubEq (mapFoldTuple tab doItRExpr t)
 
       fun elabSimplePred (rinstTab : RelInstTable.t) sp = 
         case sp of
@@ -387,15 +461,33 @@ struct
         | If vcps => mapSnd If $ mapFoldTuple rinstTab elabVCPred vcps
         | Iff vcps => mapSnd Iff $ mapFoldTuple rinstTab elabVCPred vcps
 
-      val (rinstTab,anteP') = elabVCPred RelInstTable.empty anteP
+      val (rinstTab,anteP') = elabVCPred initRIT anteP
       val (rinstTab,conseqP') = elabVCPred rinstTab conseqP
 
-      val newtydbinds = Vector.map (RelInstTable.toVector rinstTab,
-        fn (RInst (relId,tydvec),relId') =>
+      (*
+       * Encode svars as tyvars.
+       *)
+      exception SVarNotFound
+      val sMap = HashTable.mkTable (fn v => HashString.hashString $
+        SVar.toString v, SVar.eq) (117, SVarNotFound)
+      val encodeSVar = fn v => case HashTable.find sMap v of
+          SOME tyvar => tyvar
+        | NONE => 
           let
-            val {ty,map} = RE.find re relId handle RE.RelNotFound _ =>
-              Error.bug ("Unknown Relation: "^(RelLang.RelId.toString relId))
-            val RelTy.Tuple tydvec = RelTyS.instantiate (ty,tydvec)
+            val bogus = SourcePos.bogus
+            val tyvar = TyD.makeTvar $ Tyvar.newString 
+              (SVar.toString v, {left=bogus, right=bogus})
+            val _ = HashTable.insert sMap (v,tyvar)
+          in
+            tyvar
+          end 
+      val newtydbinds = Vector.map (RelInstTable.toVector rinstTab,
+        fn (_,{rel=relId',sort}) =>
+          let
+            val SPS.ColonArrow (tyd,TS.Tuple tts) = sort
+            val tydvec = Vector.fromList $ tyd :: (List.map (tts, 
+              fn tts => case tts of TS.T tyd => tyd 
+              | TS.S t =>  encodeSVar t))
             val boolTyD = TyD.makeTconstr (Tycon.bool,[])
             val relArgTyd = TyD.Trecord $ Record.tuple tydvec
             val relTyD = TyD.makeTarrow (relArgTyd,boolTyD)
@@ -404,9 +496,39 @@ struct
             (relvid,relTyD)
           end)
 
+      exception Return of PRE.t
+      val newPre = Vector.fold (RIT.toVector rinstTab, PRE.empty,
+        fn ((rinst, {rel=newRel,sort}),newPre) =>
+          let
+            val RInst {targs,sargs,rargs,rel} = rinst
+            val _ = case len rargs of 0 => raise (Return newPre)
+              | _ => ()
+            val {def,...} = PRE.find pre rel handle
+              PRE.ParamRelNotFound _ => Error.bug "Unknown Param Rel"
+            val abs = Bind.instantiate (def, targs, rargs)
+            val Bind.Abs (bv,expr) = abs
+            val Bind.Expr {ground=(grel,gtargs,_), fr} = expr
+            val grinst = RInst {targs=gtargs, sargs=empty(),
+              rargs=empty(), rel=grel}
+            val {rel=grAlias, ...} = RIT.find rinstTab grinst handle
+              RIT.KeyNotFound _ => Error.bug "GRel Inst not found"
+            val expr' = Bind.Expr {ground=(grAlias,empty(),bv), fr=fr}
+            val abs' = Bind.Abs (bv,expr')
+            val def' = Bind.fromAbs abs'
+          in
+            PRE.add newPre (newRel,{ty=PTS.simple (empty(),sort), 
+              def=def'})
+          end handle Return newPre => newPre)
+
       val tydbinds' = Vector.concat [tydbinds,newtydbinds]
+      val bindings = {tbinds=tydbinds', rbinds=newPre}
+      (*
+      val _ = print "RelInstTable : \n"
+      val _ = Control.message (Control.Top, fn _ =>
+        RIT.layout rinstTab)
+      *)
     in
-      T (tydbinds',anteP',conseqP')
+      T (bindings,anteP',conseqP')
     end
 
   fun layout (vcs : t vector) =
@@ -433,8 +555,11 @@ struct
         | Iff (vc1,vc2) => L.seq [laytVCPred vc1, L.str " <=> ", 
               laytVCPred vc2]
 
-      fun layoutVC (T (tybinds,vcp1,vcp2)) = 
-        Pretty.nest ("bindings",laytTyDBinds tybinds,
+      fun layoutVC (T ({tbinds=tybinds, rbinds=pre},vcp1,vcp2)) = 
+        Pretty.nest ("bindings",
+          L.align[
+            laytTyDBinds tybinds,
+            PRE.layout pre],
           L.align [
             L.indent(laytVCPred vcp1,3),
             L.str "=>",

@@ -24,6 +24,7 @@ sig
   val find : t -> Key.t -> Value.t
   val add : t -> Key.t -> Value.t -> t
   val remove : t -> Key.t -> t
+  val map : t -> (Key.t * Value.t -> Key.t * Value.t) -> t
   val toVector : t -> (Key.t * Value.t) vector
   val layout : t -> Layout.t
 end

@@ -116,9 +116,11 @@ structure ElaborateVarEnv = ElaborateVarEnv (structure SpecLang = SpecLang
                                    structure ANormalCoreML = ANormalCoreML)
 structure VE = ElaborateVarEnv.VE
 structure RE = ElaborateVarEnv.RE
+structure PRE = ElaborateVarEnv.PRE
 
 structure SpecVerify = SpecVerify (structure VE = VE
                                    structure RE = RE
+                                   structure PRE = PRE
                                    structure ANormalCoreML = ANormalCoreML)
 
 structure VC = SpecVerify.VC
@@ -530,7 +532,7 @@ in
             fun $ (f,arg) = f arg
             infixr 5 $
             val speclang = specast
-            val (ve,re) = Control.pass 
+            val (ve,re,pre) = Control.pass 
               {
                 display = Control.NoDisplay,
                 name = "Spec Elab",
@@ -539,7 +541,6 @@ in
                 suffix = "elr",
                 thunk = (fn () => ElaborateVarEnv.elaborate ancoreML speclang)
               }
-            
             (* 
              * Hack : ML has ::, but not cons. So, ty(::) <- ty(cons) 
              * and remove cons from ve.
@@ -549,15 +550,20 @@ in
             val consty = VE.find ve consvid
             val ve = VE.add (VE.remove (VE.remove ve consvid) consvid')
               (consvid',consty)
+            (*
             val _ = print "Specification Ast:\n"
             val _ = Control.message (Control.Top, fn _ =>
               SpecLang.RelSpec.layout specast)
+            *)
             val _ = print "Var Env:\n"
             val _ = Control.message (Control.Top, fn _ =>
               VE.layout ve)
             val _ = print "Rel Env:\n"
             val _ = Control.message (Control.Top, fn _ =>
               RE.layout re)
+            val _ = print "Param Rel Env:\n"
+            val _ = Control.message (Control.Top, fn _ =>
+              PRE.layout pre)
             val _ = print "\n"
             val vcs = Control.pass 
               {
@@ -566,14 +572,14 @@ in
                 stats = fn _ => Layout.empty,
                 style = Control.ML,
                 suffix = "specverify",
-                thunk = (fn () =>SpecVerify.doIt (ve,ancoreML))
+                thunk = (fn () =>SpecVerify.doIt (ve,PRE.empty,ancoreML))
               }
             fun layouts (vcs,output) = (
               output $ Layout.str "Elaborated VarEnv:\n";
               output $ VE.layout ve;
               VC.layouts (vcs,output))
-            (*val _ = Control.saveToFile ({suffix = "vcs"}, No, vcs,
-                                      Layouts layouts)*)
+            val _ = Control.saveToFile ({suffix = "vcs"}, No, vcs,
+                                      Layouts layouts)
             val elabvcs = Control.pass 
               {
                 display = Control.NoDisplay,
@@ -582,10 +588,10 @@ in
                 style = Control.ML,
                 suffix = "elabvcs",
                 thunk = (fn () =>Vector.map (vcs, fn vc =>
-                    VC.elaborate (re,vc)))
+                    VC.elaborate (re,pre,vc)))
               }
-            (*val _ = Control.saveToFile ({suffix = "evcs"}, No, elabvcs,
-                                      Layouts VC.layouts)*)
+            val _ = Control.saveToFile ({suffix = "evcs"}, No, elabvcs,
+                                      Layouts VC.layouts)
             exception CantDischargeVC
             fun dischargeVC (i,vc) = case VCE.discharge vc of
                 VCE.Success => print ("VC# "^(Int.toString i)^" discharged\n")

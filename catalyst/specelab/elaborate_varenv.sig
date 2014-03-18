@@ -17,7 +17,9 @@ sig
   include ELABORATE_VAR_ENV_STRUCTS
   structure VE : VAR_ENV
   structure RE : REL_ENV
+  structure PRE : PARAM_REL_ENV
   sharing VE.SpecLang = RE.SpecLang
 
-  val elaborate : ANormalCoreML.Program.t -> SpecLang.RelSpec.t -> (VE.t * RE.t) 
+  val elaborate : ANormalCoreML.Program.t -> SpecLang.RelSpec.t ->
+    (VE.t * RE.t * PRE.t) 
 end

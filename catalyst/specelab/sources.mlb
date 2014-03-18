@@ -18,6 +18,8 @@ local
   varenv.fun
   relenv.sig
   relenv.fun
+  param_relenv.sig
+  param_relenv.fun
   elaborate_varenv.sig
   elaborate_varenv.fun
 in
@@ -25,6 +27,7 @@ in
   functor ApplicativeMap
   signature VAR_ENV
   signature REL_ENV
+  signature PARAM_REL_ENV
   signature ELABORATE_VAR_ENV
   functor ElaborateVarEnv
 end

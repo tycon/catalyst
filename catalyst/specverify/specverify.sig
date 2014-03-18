@@ -2,8 +2,10 @@ signature SPEC_VERIFY_STRUCTS =
 sig
   structure VE : VAR_ENV
   structure RE : REL_ENV
+  structure PRE : PARAM_REL_ENV
   structure ANormalCoreML : A_NORMAL_CORE_ML
   sharing VE.SpecLang = RE.SpecLang
+  sharing RE.SpecLang = PRE.SpecLang
   sharing VE.Var = ANormalCoreML.Var
   sharing VE.SpecLang.Con = ANormalCoreML.Con
   sharing VE.SpecLang.TypeDesc = ANormalCoreML.TypeDesc
@@ -23,5 +25,5 @@ sig
    * Verifies program in the context of var env.
    * Returns verification conditions.
    *)
-  val doIt : VE.t * ANormalCoreML.Program.t -> VC.t vector
+  val doIt : VE.t * PRE.t * ANormalCoreML.Program.t -> VC.t vector
 end

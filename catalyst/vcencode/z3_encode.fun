@@ -22,7 +22,8 @@ struct
   datatype set = Null
                | Set of {ty : sort vector,
                          pred : ast vector -> z3_ast}
-  datatype struc_rel = SR of {rel : ast -> set}
+  datatype struc_rel = SR of {ty : sort vector, 
+                              rel : ast -> set}
   type assertion = z3_ast
   type context = z3_context
   val log = z3_log
@@ -96,11 +97,17 @@ struct
           T (name, z3_sort)
         end
 
+      fun sortToZ3Sort sort = case sort of Int t => t 
+        | Bool t => t | T (name,t) => t
+
+      fun sortToString sort = Z3_sort_to_string (ctx, sortToZ3Sort sort)
+
       fun typeCheckAst (AST (ast,sort),sort') = case (sort,sort') of
           (Int _,Int _) => true
         | (Bool _ , Bool _) => true
         | (T (name1,_), T (name2, _)) => name1 = name2
-        | _ => false
+        | _ => (print ("Sort mismatch: "^(sortToString sort)
+          ^" vs "^(sortToString sort')); false)
 
       fun astToZ3Ast (AST (z3_ast,sort)) = z3_ast
 
@@ -108,11 +115,6 @@ struct
         Z3_ast_to_string (ctx,z3_ast)
 
       fun sortOfAst (AST (_,sort)) = sort
-
-      fun sortToZ3Sort sort = case sort of Int t => t 
-        | Bool t => t | T (name,t) => t
-
-      fun sortToString sort = Z3_sort_to_string (ctx, sortToZ3Sort sort)
 
       fun constToString ast = Z3_ast_to_string (ctx, astToZ3Ast ast)
 
@@ -201,23 +203,27 @@ struct
               Set {ty = ty', pred = pred'}
             end
         in
-          SR {rel = rel}
+          SR {ty=sorts, rel = rel}
         end
 
-      fun mkStrucRelApp (SR {rel}, ast) = rel ast
+      fun mkStrucRelApp (SR {rel, ...}, ast) = rel ast
 
-      fun mkSetProp (sorts : sort vector, propfn : ast vector -> 
-        (z3_pattern vector * z3_ast)) =
+      fun mkSetUProp (indx, sorts : sort vector, propfn : ast vector
+          -> (z3_pattern vector * z3_ast)) =
         let
           val numbvs = Vector.length sorts
-          val bvs = Vector.mapi (sorts, fn (i,sort) => 
-            mkBoundVar ctx (i,sort))
-          val bvtys = Vector.map (sorts,sortToZ3Sort)
+          val (bvs,indx') = Vector.mapAndFold (sorts, indx, 
+            fn (sort,i) => (mkBoundVar ctx (i,sort), i+1))
           (* 
            * De-brujin. Therefore: bv_n,bv_n-1,...,bv_0 
+           * Z3 applies the convention that the last element in the
+           * bvnames and bvtys array refers to the variable with
+           * index 0, the second to last element of bvnames and
+           * bvtys refers to the variable with index 1
            *)
           val bvnames = Vector.tabulate (numbvs, fn i => mkSym 
-            ("bv"^(Int.toString (numbvs-i-1))))
+            ("bv"^(Int.toString (indx+numbvs-i-1))))
+          val bvtys = Vector.rev $ Vector.map (sorts,sortToZ3Sort)
           val (patterns,prop) = propfn bvs
           val forall = Z3_mk_forall (ctx, 0, 
                         Vector.length patterns, 
@@ -228,6 +234,34 @@ struct
                         prop)
         in
           forall
+        end
+
+      fun mkSetProp (sorts : sort vector, propfn : ast vector -> 
+        (z3_pattern vector * z3_ast)) =
+          mkSetUProp (0, sorts, propfn)
+
+      fun mkSetExProp (indx, sorts : sort vector, propfn : ast vector 
+          -> (z3_pattern vector * z3_ast)) =
+        let
+          val numbvs = Vector.length sorts
+          val (bvs,indx') = Vector.mapAndFold (sorts, indx, 
+            fn (sort,i) => (mkBoundVar ctx (i,sort), i+1))
+          (* 
+           * De-brujin. Therefore: bv_n,bv_n-1,...,bv_0 
+           *)
+          val bvnames = Vector.tabulate (numbvs, fn i => mkSym 
+            ("ev"^(Int.toString (numbvs-i-1))))
+          val bvtys = Vector.rev $ Vector.map (sorts,sortToZ3Sort)
+          val (patterns,prop) = propfn bvs
+          val exists = Z3_mk_exists (ctx, 0, 
+                        Vector.length patterns, 
+                        patterns,
+                        numbvs,
+                        bvtys, 
+                        bvnames, 
+                        prop)
+        in
+          exists
         end
 
       fun dischargeAssertion asr = 
@@ -387,6 +421,155 @@ struct
             s
           end
 
+      val mkQCrossPrd = fn (sets) =>
+          let
+            val length = Vector.length
+            val h = fn (x,y) => (x, Vector.map (y,length), 
+              Vector.concatV y)
+            val (dsorts,lens,rsorts) = h $ Vector.unzip $ Vector.map 
+              (sets, fn (Set {ty,...}) => (Vector.sub (ty,0),
+                Vector.dropPrefix (ty,1)))
+            val sorts = Vector.concat [dsorts,rsorts]
+            val s as Set {ty,pred} = mkSet (genSetName (), sorts)
+            val _ = assertSetProp (ty, fn bvAsts =>
+              let
+                val dbvs = Vector.prefix (bvAsts, length dsorts)
+                val rbvs = Vector.dropPrefix (bvAsts, length dsorts)
+                val (bvss, _) = Vector.map2AndFold (dbvs,lens,rbvs,
+                  fn (dbv,len,rest) => (Vector.concat [Vector.new1 dbv,
+                      Vector.prefix (rest,len)], 
+                    Vector.dropPrefix (rest, len)))
+                val _ = assert (length sets = length bvss,
+                  "mkQCrossPrd invariant failed")
+                val fnapps = Vector.map2 (sets, bvss, 
+                  fn (Set {pred,...},bvs) => pred bvs)
+                val conj = Z3_mk_and (ctx,length fnapps, fnapps)
+                val fnapp = pred bvAsts
+                val iff = Z3_mk_iff (ctx,fnapp,conj)
+                val pats = mkMultiPatterns [[fnapp], (Vector.toList
+                  fnapps)]
+              in
+                (pats, iff)
+              end)
+          in
+            s
+          end
+
+      fun mkQStrucRelApp (SR {ty,rel}) = Set {ty=ty, pred=
+        fn bvs =>
+          let
+            val bv0 = Vector.sub (bvs,0)
+            val bvs'= Vector.dropPrefix (bvs,1)
+            val Set {pred, ...} = rel bv0
+          in
+            pred bvs'
+          end}
+      
+      fun mkBind (Set {ty=ty1, pred=pred1},
+          Set {ty=ty2, pred=pred2}) =
+        let
+          val length = Vector.length
+          val srDomain = Vector.sub (ty1,0)
+          val sorts = Vector.concat [Vector.new1 srDomain,
+            ty2]
+          val s as Set {ty,pred} = mkSet (genSetName (), sorts)
+          val _ = assertSetProp (ty, fn bvAsts =>
+            let
+              val bvs1 = Vector.prefix (bvAsts,length ty1)
+              val bvs2 = Vector.dropPrefix (bvAsts,1)
+              val fnapp1 = pred1 bvs1
+              val fnapp2 = pred2 bvs2
+              val conj = Z3_mk_and (ctx,2,Vector.fromList 
+                [fnapp1,fnapp2])
+              val fnapp = pred bvAsts
+              val iff = Z3_mk_iff (ctx,fnapp,conj)
+              val pats = mkMultiPatterns [[fnapp], [fnapp1,
+                fnapp2]]
+            in
+              (pats, iff)
+            end)
+        in
+          s
+        end
+        | mkBind (Null,_) = Null | mkBind (_,Null) = Null
+
+      fun assertBindIf (Set {ty=ty1, pred=pred1},
+          Set {ty=ty2, pred=pred2}) =
+        let
+          val length = Vector.length
+          val suffix = fn (l,n) => Vector.dropPrefix 
+            (l, (length l)-n)
+          val sorts = ty2
+          val prop = mkSetProp (sorts, fn bvAsts =>
+            let
+              val rLen1 = (length ty1) - 1
+              val bvs10 = Vector.sub (bvAsts,0)
+              val bvs11 = suffix (bvAsts,rLen1)
+              val bvs1 = Vector.concat [Vector.new1 bvs10, bvs11]
+              val bvs2 = bvAsts
+              val fnapp1 = pred1 bvs1
+              val fnapp2 = pred2 bvs2
+              val imp = Z3_mk_implies (ctx,fnapp2,fnapp1)
+              val pats = mkMultiPatterns [[fnapp2, fnapp1]]
+            in
+              (pats, imp)
+            end)
+        in
+          dischargeAssertion prop
+        end
+        | assertBindIf _ = raise (Fail "Bind eqn with null set")
+
+      fun assertBindOnlyIf (Set {ty=ty1, pred=pred1},
+          Set {ty=ty2, pred=pred2}) =
+        let
+          val length = Vector.length
+          val usorts = ty1
+          val dLen1 = 1
+          val rLen1 = (length ty1) - dLen1
+          val exsorts = Vector.dropSuffix(Vector.dropPrefix 
+            (ty2,dLen1),rLen1)
+          val exi = 0
+          val ui = length exsorts
+          fun expropfn (ubvs : ast vector, exbvs:ast vector) =
+            let
+              val fnapp1 = pred1 ubvs
+              val allbvs = Vector.concat [
+                (Vector.new1 (Vector.sub (ubvs,0))),
+                exbvs,
+                Vector.dropPrefix (ubvs,1)]
+              val fnapp2 = pred2 allbvs
+              val imp = Z3_mk_implies (ctx,fnapp1,fnapp2)
+              val pats = mkMultiPatterns [[fnapp1, fnapp2]]
+            in
+              (pats,imp)
+            end
+          val uprop = mkSetUProp (ui,usorts, fn ubvs =>
+            let
+              val fnapp1 = pred1 ubvs
+              val exprop = mkSetExProp (exi, exsorts, 
+                fn exbvs =>
+                  let
+                    (*
+                    val _ = print "Ex bvs are: "
+                    val _ = print $ Vector.toString astToString exbvs
+                    val _ = print "\n fnapp1 is: "
+                    val _ = print $ Z3_ast_to_string (ctx,fnapp1)
+                    val _ = print "\n"
+                    *)
+                  in
+                    expropfn (ubvs,exbvs)
+                  end)
+              val pats = mkSimplePatterns []
+            in
+              (pats, exprop)
+            end)
+        in
+          dischargeAssertion uprop
+        end
+        | assertBindOnlyIf _ = raise (Fail "Bind eqn with null set")
+
+      fun assertBindEq x = (assertBindIf x ; assertBindOnlyIf x)
+
       fun mkNot asr = Z3_mk_not (ctx, asr) 
 
       fun mkIf (asr1,asr2) = Z3_mk_implies (ctx, asr1, asr2) 
@@ -423,6 +606,10 @@ struct
         mkUnion = mkUnion,
         mkCrossPrd = mkCrossPrd,
         mkDiff = mkDiff,
+        mkQStrucRelApp = mkQStrucRelApp,
+        mkQCrossPrd = mkQCrossPrd,
+        mkBind = mkBind,
+        assertBindEq = assertBindEq,
         mkSetEqAssertion = mkSetEqAssertion,
         mkSubSetAssertion = mkSubSetAssertion,
         mkConstEqAssertion = mkConstEqAssertion,

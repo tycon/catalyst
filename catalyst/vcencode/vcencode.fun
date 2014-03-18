@@ -3,7 +3,7 @@ struct
   open S
   open VC
   structure TyD = TypeDesc
-  structure RI = RelLang.RelId
+  structure RI = RelId
   structure BP = Predicate.BasePredicate
   structure RP = Predicate.RelPredicate
   structure L = Layout
@@ -38,7 +38,7 @@ struct
   val assert = Control.assert
   val ignore = fn _ => ()
   
-  fun discharge (VC.T (tydbinds,anteP,conseqP)) =
+  fun discharge (VC.T ({tbinds=tydbinds, rbinds=pre}, anteP, conseqP)) =
     let
       val ctx = Z3_Encode.mkDefaultContext ()
       (*
@@ -70,6 +70,10 @@ struct
       val mkAnd = #mkAnd api
       val mkOr = #mkOr api
       val dischargeAssertion = #dischargeAssertion api
+      val mkQStrucRelApp = #mkQStrucRelApp api
+      val mkQCrossPrd = #mkQCrossPrd api
+      val mkBind = #mkBind api
+      val assertBindEq = #assertBindEq api
       (*
        * Maps to keep track of encoded values
        *)
@@ -141,6 +145,29 @@ struct
             else ignore $ encodeConst (v,tyd)
         | _ => ignore $ encodeConst (v,tyd)
 
+      fun processBindEq (theR,def) =
+        let
+          val Bind.Def {abs, ...} = def
+          val Bind.Abs (_,Bind.Expr {ground,fr}) = abs
+          val (groundR, _,_) = ground
+          val Bind.Fr (_,fre) = fr 
+          open RelLang
+          fun doItFre fre = case fre of 
+            X (re1,re2) => List.concat [doItFre re1, doItFre re2]
+          | R (RInst {rel,...},_) => [rel]
+          | _ => Error.bug "Transformer expression is not cross prd!"
+          val paramRs = Vector.fromList $ doItFre fre
+          val doItR = fn rid => mkQStrucRelApp $ 
+            getStrucRelForRelId rid
+          val gSet = doItR groundR
+          val pSets = Vector.map (paramRs, doItR)
+          val frSet = mkQCrossPrd pSets
+          val bindSet = mkBind (gSet,frSet)
+          val theSet = doItR theR
+        in
+          assertBindEq (theSet,bindSet)
+        end
+
       fun encodeBasePred (bp:BP.t) : Z3_Encode.assertion = 
         let
           open BP
@@ -171,8 +198,8 @@ struct
                 encodeRelExpr e2)
             | D (e1,e2) => mkDiff (encodeRelExpr e1, 
                 encodeRelExpr e2)
-            | R (rid,v) => mkStrucRelApp (getStrucRelForRelId rid,
-                getConstForVar v)
+            | R (RInst {rel=rid, ...},v) => mkStrucRelApp (
+                getStrucRelForRelId rid, getConstForVar v)
           val f = encodeRelExpr
           open RP
         in
@@ -205,6 +232,8 @@ struct
         | _ => dischargeAssertion $ encodeVCPred vcp
      
       val _ = Vector.foreach (tydbinds, processTyDBind)
+      val _ = Vector.foreach (PRE.toVector pre, 
+        fn (r,{def,...}) => processBindEq (r,def))
       val _ = assertVCPred anteP
       (*
        * We check the SAT of ¬conseqP

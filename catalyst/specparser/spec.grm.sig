@@ -3,6 +3,7 @@ sig
 type ('a,'b) token
 type svalue
 val EOF:  'a * 'a -> (svalue,'a) token
+val UINST:  'a * 'a -> (svalue,'a) token
 val INT: (int) *  'a * 'a -> (svalue,'a) token
 val ID: (string) *  'a * 'a -> (svalue,'a) token
 val PIPE:  'a * 'a -> (svalue,'a) token
