@@ -29,11 +29,14 @@ val CROSSPRD:  'a * 'a -> (svalue,'a) token
 val UNION:  'a * 'a -> (svalue,'a) token
 val MINUS:  'a * 'a -> (svalue,'a) token
 val PLUS:  'a * 'a -> (svalue,'a) token
+val DOT:  'a * 'a -> (svalue,'a) token
+val LAMBDA:  'a * 'a -> (svalue,'a) token
 val NOT:  'a * 'a -> (svalue,'a) token
 val ASSUME:  'a * 'a -> (svalue,'a) token
 val FALSE:  'a * 'a -> (svalue,'a) token
 val TRUE:  'a * 'a -> (svalue,'a) token
 val RELATION:  'a * 'a -> (svalue,'a) token
+val PRIMITIVE:  'a * 'a -> (svalue,'a) token
 end
 signature Spec_LRVALS=
 sig

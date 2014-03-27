@@ -43,8 +43,10 @@ sig
       mkIff : assertion * assertion -> assertion,
       mkAnd : assertion vector -> assertion,
       mkOr : assertion vector -> assertion,
+      mkUAssertion : ast vector * assertion -> assertion,
       dischargeAssertion :  assertion -> unit,
       (* -- Bind APIs -- *)
+      mkQSingletonSet : sort vector -> set,
       mkQStrucRelApp : struc_rel -> set,
       mkQCrossPrd : set vector -> set,
       mkBind : set * set -> set,

@@ -7,6 +7,7 @@ struct
   structure RP = Predicate.RelPredicate
   structure RelId = RelId
   structure TS = TupSort
+  structure PR = PrimitiveRelation
   structure SPS = SimpleProjSort
   structure PSS = ProjSortScheme
   structure PTS = ProjTypeScheme
@@ -148,26 +149,7 @@ struct
   fun havocTyBind (v : Var.t,refTy : RefTy.t) : (tydbinds*vc_pred) vector =
     let
       open RefTy
-      (* -- These functions duplicated from SpecVerify -- *)
-      val newLongVar = fn (var,fld) => Var.fromString $
-        (Var.toString var)^"."^(Var.toString fld)
-      (*
-       * Decomposes single tuple bind of form v ↦ {x0:T0,x1:T1} to
-       * multiple binds : [v.x0 ↦ T0, v.x1 ↦ T1]
-       *)
-      fun decomposeTupleBind (tvar : Var.t, tty as RefTy.Tuple 
-        refTyBinds) : (Var.t*RefTy.t) vector =
-        let
-          val bindss = Vector.map (refTyBinds, 
-            fn (refTyBind as (_,refTy)) => 
-              case refTy of 
-                RefTy.Tuple _ => decomposeTupleBind refTyBind
-              | _ => Vector.new1 refTyBind)
-          val binds = Vector.map (Vector.concatV bindss, 
-            fn (v,ty) => (newLongVar (tvar,v), ty))
-        in
-          binds
-        end
+      val decomposeTupleBind = RefTy.decomposeTupleBind
     in
       case refTy of
         (* removing any _mark_ *)
@@ -360,7 +342,11 @@ struct
 
       val tyDB = Vector.fold (tydbinds,TyDBinds.empty, 
         fn ((v,tyd),tyDB) => TyDBinds.add tyDB v tyd)
-
+      (*
+       * initRIT contains params from typespecs. Variable rbinds is a
+       * PRE and not RE, as it lets us use same VC.t to represent both
+       * high-level and elaborated VCs.
+       *)
       val initRIT = Vector.fold (PRE.toVector rbinds, RIT.empty, 
         fn ((r,{ty,...}),rit) =>
           let
@@ -381,17 +367,49 @@ struct
           handle RIT.KeyNotFound _ => NONE
 
       exception Return of (RIT.t * RI.t)
+      fun doItPRInst (ie as RelLang.RInst {targs,sargs,args,rel}) rit
+          : (RIT.t * RI.t) = 
+        let
+          val rinst = RInst {rel=rel, targs=targs, sargs=sargs,
+            rargs = Vector.map (args, 
+              fn (RelLang.RInst {rel, ...}) => rel)}
+          val _ = case getSymForRInst rit rinst of NONE => ()
+            | SOME rel' => raise (Return (rit,rel'))
+          val rel' = genSym rel
+          val err = fn _ => Error.bug $ 
+            "Unknown prim rel "^(RI.toString rel)
+          val relTyS = (#ty $ PRE.find pre rel)
+          val PSS.T {sort, ...} = PTS.instantiate (relTyS,targs)
+          val ProjSort.T {sort=sps, ...} = sort
+          val SPS.ColonArrow (prD,prR) = sps
+          fun rangeOf (TyD.Tarrow (_,tyd)) = rangeOf tyd
+            | rangeOf tyd = tyd
+          val rinstSort = SPS.ColonArrow (rangeOf prD,prR)
+          val rit' = RIT.add rit rinst {rel=rel',sort=rinstSort}
+        in
+          (rit',rel')
+        end handle (Return a) => a
+
       fun doItIE (ie as RelLang.RInst {targs,sargs,args,rel}) rit 
           : (RIT.t * RI.t) =
         let
+          val len = Vector.length
+          val _ = (case #def $ PRE.find pre rel of 
+              PRE.Prim _ => raise (Return $ doItPRInst ie rit)
+            | _ => ()) handle PRE.ParamRelNotFound _ => ()
           val (syms,rit') = Vector.mapAndFold (args,rit,
             fn (ie,rit) => inv $ doItIE ie rit) 
           val rinst = RInst {targs=targs, sargs=sargs, rargs=syms,
               rel=rel}
+          (*
+           * Note: When rel is a rel-param, then syms is an empty
+           * vector. Map rit, which is derived from initRIT, already
+           * maps rel-params (from rbinds) to themselves.
+           *)
           val _ = case getSymForRInst rit' rinst of NONE => ()
-            | SOME rel' => raise (Return (rit',rel'))
+            (* If rel-param, always returns *)
+            | SOME rel' => raise (Return (rit',rel')) 
           val rel' = genSym rel
-          val len = Vector.length
           val err = fn _ => Error.bug $ 
             "Unknown rel "^(RI.toString rel)
           (* Obs : Pulling #ty out of case fails typecheck *)
@@ -400,13 +418,6 @@ struct
           | _ => (#ty $ PRE.find pre rel)) handle 
             PRE.ParamRelNotFound _ => err() ) handle 
             RE.RelNotFound _ => err()
-          (*
-          val _ = print "instexpr:\n"
-          val _ = print $ RelLang.ieToString ie
-          val _ = print "\nPTS:\n"
-          val _ = print $ PTS.toString relTyS
-          val _ = print "\n"
-          *)
           val relSS = PTS.instantiate (relTyS,targs)
           val ProjSort.T {sort, ...} = PSS.instantiate (relSS,sargs)
           val rit'' = RIT.add rit' rinst {rel=rel',sort=sort}
@@ -491,30 +502,61 @@ struct
             val boolTyD = TyD.makeTconstr (Tycon.bool,[])
             val relArgTyd = TyD.Trecord $ Record.tuple tydvec
             val relTyD = TyD.makeTarrow (relArgTyd,boolTyD)
-            val relvid = Var.fromString $ RI.toString relId'
+            val rtov = Var.fromString o RelId.toString
+            val relvid = rtov relId'
           in
             (relvid,relTyD)
           end)
 
+      (* --- new tydbinds generation done --- *)
+
+      fun instPrimRelDef def (RInst {rargs,rel, ...}) =
+        let
+          val rtov = Var.fromString o RelId.toString
+          val argVars = Vector.map (rargs, rtov)
+          val def' = PR.instantiate (def, argVars)
+        in
+          def'
+        end
+
+      fun instParamRelDef def (RInst {targs,sargs,rargs,rel}) =
+        let
+          val abs = Bind.instantiate (def, targs, rargs)
+          val Bind.Abs (bv,expr) = abs
+          val Bind.Expr {ground=(grel,gtargs,_), fr} = expr
+          val grinst = RInst {targs=gtargs, sargs=empty(),
+            rargs=empty(), rel=grel}
+          val {rel=grAlias, ...} = RIT.find rinstTab grinst handle
+            RIT.KeyNotFound _ => Error.bug "GRel Inst not found"
+          val expr' = Bind.Expr {ground=(grAlias,empty(),bv), fr=fr}
+          val abs' = Bind.Abs (bv,expr')
+          val def' = Bind.fromAbs abs'
+        in
+          def'
+        end
+
       exception Return of PRE.t
+      (*
+       * newPre contains instantiated definitions of instantiated
+       * parametric/primitive relations.
+       * rinstTab was already processed to generate newtydbinds.
+       * Therefore, type declarations of all relations in newPre are
+       * present in tbinds of elaborated VC.t.
+       *)
       val newPre = Vector.fold (RIT.toVector rinstTab, PRE.empty,
         fn ((rinst, {rel=newRel,sort}),newPre) =>
           let
-            val RInst {targs,sargs,rargs,rel} = rinst
-            val _ = case len rargs of 0 => raise (Return newPre)
-              | _ => ()
+            val RInst {rel, rargs, ...} = rinst
             val {def,...} = PRE.find pre rel handle
-              PRE.ParamRelNotFound _ => Error.bug "Unknown Param Rel"
-            val abs = Bind.instantiate (def, targs, rargs)
-            val Bind.Abs (bv,expr) = abs
-            val Bind.Expr {ground=(grel,gtargs,_), fr} = expr
-            val grinst = RInst {targs=gtargs, sargs=empty(),
-              rargs=empty(), rel=grel}
-            val {rel=grAlias, ...} = RIT.find rinstTab grinst handle
-              RIT.KeyNotFound _ => Error.bug "GRel Inst not found"
-            val expr' = Bind.Expr {ground=(grAlias,empty(),bv), fr=fr}
-            val abs' = Bind.Abs (bv,expr')
-            val def' = Bind.fromAbs abs'
+              (*
+               * r \in domain(rinstTab) /\ r \notin domain(pre) =>
+               * r is a rel-param
+               *)
+              PRE.ParamRelNotFound _ => raise (Return newPre)
+            val def'  = case (def, len rargs) of 
+              (PRE.Prim pdef, _) => PRE.Prim $ instPrimRelDef pdef rinst
+            | (PRE.Bind bdef, 0) => raise (Return newPre)
+            | (PRE.Bind bdef, _) => PRE.Bind $ instParamRelDef bdef rinst
           in
             PRE.add newPre (newRel,{ty=PTS.simple (empty(),sort), 
               def=def'})

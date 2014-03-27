@@ -149,8 +149,20 @@ sig
                        params : RelId.t vector,
                        map : (Con.t * Var.t vector option * RelLang.term)
                              vector}
-    val conMapToString : (Con.t * Var.t vector option * RelLang.term) vector -> string
+    val conMapToString : (Con.t * Var.t vector option * RelLang.term) vector 
+      -> string
     val toString : t -> string
+  end
+
+  structure PrimitiveRelation :
+  sig
+    datatype def = Nullary of RelLang.expr
+                 | Nary of Var.t * def
+    datatype t = T of {id : RelId.t,
+                       def : def}
+    val instantiate : def * Var.t vector -> def
+    val defToString : def -> string
+    val alphaRename : def -> def
   end
 
   structure TyDBinds : APPLICATIVE_MAP where 
@@ -223,6 +235,8 @@ sig
     val mapTyD : t -> (TypeDesc.t -> TypeDesc.t) -> t
     val exnTyp : unit -> t
     val mapSVar : t -> (SVar.t -> TupSort.t) -> t
+    (* pre-condition: input t must be a Tuple _ *)
+    val decomposeTupleBind : Var.t*t -> (Var.t*t) vector
   end
 
   structure ParamRefType :
@@ -276,6 +290,7 @@ sig
       val layout : t -> Layout.t
     end
     datatype t = T of {reldecs : StructuralRelation.t vector,
+                       primdecs : PrimitiveRelation.t vector,
                        typespecs : TypeSpec.t vector}
     val layout : t -> Layout.t
   end

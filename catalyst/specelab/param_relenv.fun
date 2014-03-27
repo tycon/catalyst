@@ -5,8 +5,11 @@ struct
 
   structure TyD = TypeDesc
 
-  type reldesc = { ty : ProjTypeScheme.t,
-                   def : Bind.def}
+  datatype def = Prim of SpecLang.PrimitiveRelation.def
+           | Bind of SpecLang.Bind.def
+  
+  type reldesc = { ty : SpecLang.ProjTypeScheme.t,
+                   def : def}
 
   val relIdStrEq = fn (v,v') => 
     (RelId.toString v) = (RelId.toString v')
@@ -23,7 +26,9 @@ struct
     val toString = fn ({ty,def}) =>
       let
         val tyDS = ProjTypeScheme.toString ty
-        val defStr = Bind.defToString def
+        val defStr = case def of 
+          Bind bdef => Bind.defToString bdef
+        | Prim pdef => PrimitiveRelation.defToString pdef
       in
         "{typescheme = "^tyDS^", def = "^defStr^"}"
       end
@@ -44,10 +49,10 @@ struct
   fun find env relId = RelMap.find env relId 
     handle (RelMap.KeyNotFound k) => raise (ParamRelNotFound k)
 
-  val add = fn env => fn (var,tys) => RelMap.add env var tys 
+  val add = fn env => fn (var,desc) => RelMap.add env var desc
 
   val addUniterp = fn env => fn (var,tys) => RelMap.add env var
-  {ty=tys, def=Bind.BogusDef}
+  {ty=tys, def=Bind Bind.BogusDef}
 
   val remove = RelMap.remove
 

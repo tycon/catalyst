@@ -225,9 +225,13 @@ struct
             ("bv"^(Int.toString (indx+numbvs-i-1))))
           val bvtys = Vector.rev $ Vector.map (sorts,sortToZ3Sort)
           val (patterns,prop) = propfn bvs
+          (*
+           * We currently disable explicit pattern annotations,
+           * as they are not serving any purpose.
+           *)
           val forall = Z3_mk_forall (ctx, 0, 
-                        Vector.length patterns, 
-                        patterns,
+                        (*Vector.length patterns*) 0, 
+                        (*patterns*) Vector.new0 (),
                         numbvs,
                         bvtys, 
                         bvnames, 
@@ -253,9 +257,13 @@ struct
             ("ev"^(Int.toString (numbvs-i-1))))
           val bvtys = Vector.rev $ Vector.map (sorts,sortToZ3Sort)
           val (patterns,prop) = propfn bvs
+          (*
+           * We currently disable explicit pattern annotations,
+           * as they are not serving any purpose.
+           *)
           val exists = Z3_mk_exists (ctx, 0, 
-                        Vector.length patterns, 
-                        patterns,
+                        (*Vector.length patterns*) 0, 
+                        (*patterns*) Vector.new0 (),
                         numbvs,
                         bvtys, 
                         bvnames, 
@@ -455,6 +463,28 @@ struct
             s
           end
 
+      fun mkQSingletonSet sorts = 
+        let
+          val len = Vector.length
+          val qSorts = Vector.concat [sorts,sorts]
+          val set as Set {ty,pred} = mkSet (genSetName (),qSorts)
+          val _ = assertSetProp (qSorts, fn bvAsts =>
+            let
+              val fnapp = pred bvAsts
+              val bvAsts1 = Vector.prefix (bvAsts, len sorts)
+              val bvAsts2 = Vector.dropPrefix (bvAsts, len sorts)
+              val eqs = Vector.map2 (bvAsts1,bvAsts2,mkEq)
+              val conj = if len eqs = 1 then Vector.sub (eqs,0)
+                else Z3_mk_and (ctx,Vector.length eqs,eqs)
+              val iff = Z3_mk_iff (ctx,fnapp,conj)
+              val pattern = Z3_mk_pattern (ctx,1,Vector.new1 fnapp)
+            in
+              (Vector.new1 pattern, iff)
+            end)
+        in
+          set
+        end
+
       fun mkQStrucRelApp (SR {ty,rel}) = Set {ty=ty, pred=
         fn bvs =>
           let
@@ -570,6 +600,20 @@ struct
 
       fun assertBindEq x = (assertBindIf x ; assertBindOnlyIf x)
 
+      fun mkUAssertion (asts,assn) =
+        let
+          val asts = Vector.map (asts, fn ast => Z3_to_app 
+            (ctx, astToZ3Ast ast))
+          val forall = Z3_mk_forall_const (ctx, 0, 
+                        Vector.length asts, 
+                        asts,
+                        0,
+                        Vector.new0 (), 
+                        assn)
+        in
+          forall
+        end
+
       fun mkNot asr = Z3_mk_not (ctx, asr) 
 
       fun mkIf (asr1,asr2) = Z3_mk_implies (ctx, asr1, asr2) 
@@ -606,6 +650,7 @@ struct
         mkUnion = mkUnion,
         mkCrossPrd = mkCrossPrd,
         mkDiff = mkDiff,
+        mkQSingletonSet = mkQSingletonSet,
         mkQStrucRelApp = mkQStrucRelApp,
         mkQCrossPrd = mkQCrossPrd,
         mkBind = mkBind,
@@ -618,6 +663,7 @@ struct
         mkIff = mkIff,
         mkAnd = mkAnd,
         mkOr = mkOr,
+        mkUAssertion = mkUAssertion,
         dischargeAssertion = dischargeAssertion
        }
     end

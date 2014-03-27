@@ -117,7 +117,14 @@ struct
             ()
           end
         val newEq = case eq c of
-            (Tuple [S v1], rty2) => (assertNotCirc (v1,rty2);
+            (*
+             * An empty set is sub-set of every set. So, comparing a
+             * tuple sort with empty sort will yeild no new
+             * information.
+             *)
+            (Tuple [S v1], Tuple []) => NONE
+          | (Tuple [], Tuple [S v2]) => NONE
+          | (Tuple [S v1], rty2) => (assertNotCirc (v1,rty2);
               SOME (v1,rty2))
           | (rty1, Tuple [S v2]) => (assertNotCirc (v2,rty1);
               SOME (v2,rty1))
@@ -132,6 +139,7 @@ struct
             (T tyd1,T tyd2) => (assert (TyD.sameType (tyd1,tyd2),
               "Typechecking rexpr failed"); true)
           | (S v1, S v2) => SVar.eq (v1,v2)
+          | _ => false
       in
         List.keepAll (cs, fn (Eq (Tuple ts1,Tuple ts2)) =>
           case (ts1,ts2) of ([tt1],[tt2]) => not $ taut (tt1,tt2)
@@ -415,6 +423,21 @@ struct
     fun crossprd (e1,e2) = X (e1,e2)
     fun diff (e1,e2) = D (e1,e2)
     fun rNull _ = T (Vector.fromList [])
+    (*
+     * We need this function as we represent multi-arg primitive
+     * relations as parametric relations. This is a hack. 
+     *)
+    fun ieApplySubsts substs (RInst {rel,args,targs,sargs}) = 
+      let
+        val doIt = ieApplySubsts substs
+        val vtor = RelId.fromString o Var.toString
+        fun subst v = Vector.fold (substs, v, fn ((new,old),r) =>
+          if (Var.toString old = RelId.toString r) 
+            then vtor new else r)
+      in
+        RInst {rel=subst rel, args=Vector.map (args,doIt), 
+          targs=targs, sargs=sargs}
+      end
     fun applySubsts substs rexpr =
       let
         val doIt = applySubsts substs
@@ -430,7 +453,7 @@ struct
         | X (e1,e2) => X (doIt e1, doIt e2)
         | U (e1,e2) => U (doIt e1, doIt e2)
         | D (e1,e2) => D (doIt e1, doIt e2)
-        | R (ie,argvar) => R (ie, subst argvar)
+        | R (ie,argvar) => R (ieApplySubsts substs ie, subst argvar)
       end
 
     fun mapInstExpr t f = 
@@ -519,6 +542,60 @@ struct
       in
         "relation (" ^ relstr ^ ") = " ^ conmap
       end
+  end
+
+  structure PrimitiveRelation =
+  struct
+    datatype def = Nullary of RelLang.expr
+                 | Nary of Var.t * def
+    datatype t = T of {id : RelId.t,
+                       def : def}
+
+    fun defToString (Nullary rexpr) = RelLang.exprToString rexpr
+      | defToString (Nary (v,def)) = "\\"^(Var.toString v)^"."
+          ^(defToString def)
+
+    val toString =fn (T {id,def}) => "primitive relation "
+      ^(RelId.toString id)^" = "^(defToString def)
+
+    fun applySubsts (Nary (v,def)) substs =
+      Nary (v, applySubsts def substs)
+      | applySubsts (Nullary rexpr) substs = 
+          Nullary $ RelLang.applySubsts substs
+          rexpr
+
+    fun instantiate (Nary (v,def), arg::args) substs =
+          instantiate (def,args) ((arg,v)::substs)
+      | instantiate (def, []) substs = applySubsts def
+          (Vector.fromList substs)
+      | instantiate _ _ = Error.bug "Invalid primitive relation\
+        \ instantiation"
+
+    val instantiate = fn (def,args) => instantiate (def, 
+        Vector.toList args) []
+
+    val symbase = "pv_"
+
+    val count = ref 0
+
+    val genVar = fn _ => 
+      let val id = symbase ^ (Int.toString (!count))
+          val _ = count := !count + 1
+      in
+        Var.fromString id 
+      end
+    
+    fun alphaRename (Nary (v,def)) substs =
+      let
+        val newV = genVar ()
+      in
+        Nary (newV, alphaRename def $ (newV,v)::substs)
+      end
+      | alphaRename (Nullary rexpr) substs =
+          Nullary $ RelLang.applySubsts
+          (Vector.fromList substs) rexpr
+
+    val alphaRename =fn def => alphaRename def []
   end
 
   structure TyDBinds =
@@ -793,6 +870,26 @@ struct
     fun mapSVar t f = mapBaseTy t (fn (v,t,p) =>
       (v,t, Predicate.mapSVar p f))
 
+    val newLongVar = fn (var,fld) => Var.fromString $
+        (Var.toString var)^"."^(Var.toString fld)
+    (*
+     * Decomposes single tuple bind of form v ↦ {x0:T0,x1:T1} to
+     * multiple binds : [v.x0 ↦ T0, v.x1 ↦ T1]
+     *)
+    fun decomposeTupleBind (tvar : Var.t, tty as Tuple 
+      refTyBinds) : (Var.t*t) vector =
+      let
+        val bindss = Vector.map (refTyBinds, 
+          fn (refTyBind as (_,refTy)) => 
+            case refTy of 
+              Tuple _ => decomposeTupleBind refTyBind
+            | _ => Vector.new1 refTyBind)
+        val binds = Vector.map (Vector.concatV bindss, 
+          fn (v,ty) => (newLongVar (tvar,v), ty))
+      in
+        binds
+      end
+
   end
 
   structure RefTy = RefinementType
@@ -926,14 +1023,16 @@ struct
         RefinementType.layout refty]
     end
     datatype t = T of {reldecs : StructuralRelation.t vector,
+                       primdecs : PrimitiveRelation.t vector,
                        typespecs : TypeSpec.t vector}
-    val layout = fn T ({reldecs,typespecs,...}) =>
+    val layout = fn T ({reldecs,primdecs,typespecs,...}) =>
       let 
         val srs = Vector.toString StructuralRelation.toString reldecs
+        val prs = Vector.toString PrimitiveRelation.toString primdecs
         val tslyt = L.align $ Vector.toListMap (typespecs,
           TypeSpec.layout)
       in
-        L.align [L.str srs,tslyt]
+        L.align [L.str srs, L.str prs, tslyt]
       end
   end 
 

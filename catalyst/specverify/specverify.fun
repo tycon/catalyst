@@ -100,17 +100,7 @@ struct
    * Decomposes single tuple bind of form v ↦ {x0:T0,x1:T1} to
    * multiple binds : [v.x0 ↦ T0, v.x1 ↦ T1]
    *)
-  fun decomposeTupleBind (tvar : Var.t, tty as RefTy.Tuple refTyBinds) 
-    : (Var.t*RefTy.t) vector =
-    let
-      val bindss = Vector.map (refTyBinds, fn (refTyBind as (_,refTy))
-        => case refTy of RefTy.Tuple _ => decomposeTupleBind refTyBind
-        | _ => Vector.new1 refTyBind)
-      val binds = Vector.map (Vector.concatV bindss, fn (v,ty) =>
-        (newLongVar (tvar,v), ty))
-    in
-      binds
-    end
+  val decomposeTupleBind = RefTy.decomposeTupleBind
 
   (*
    * Invariant : bv and td of ty is unchanged.

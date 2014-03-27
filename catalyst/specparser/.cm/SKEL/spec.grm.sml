@@ -1,2 +1,0 @@
-Skeleton 5
-ae"SpecLrValsFun"i3aдўToken"gp1c"TOKEN"aдўSpec"gp1c"SPEC_LANG"f±яjh2ad"ParserData"h7aдўHeader"h5Cegp1я(egp1d"RelLang"f3дўCon"d"Int"дўVar"aдўTypeSpec"gp2дўRelSpec"я‚aдўRefTy"gp1дўRefinementType"NaдўLrTable"gp2яяѓCaяgpя?bезр±яѓf4d"Char"d"String"яѓd"Array"bезр±яЃd2f8яЃ8я‚я‚2Cя‚дўStructuralRelation"я‚'дўPredicate"я‚NaдўMlyValue"и0ad"EC"h2яѓ bя„ж±я…ad"Actions"h2bя„d3f6яЃ8Cя‚я‚2дўVector"яѓя‚Cя„я‚'d"RelId"я‚я…Nbbegp1я‚'f0fяѓ#f8я‚я‚2я†Cяѓd"TypeDesc"я‚'я„5я…Nя…"Nad"Tokens"jя…gp1c"Spec_TOKENS"gp1c"Spec_LRVALS"

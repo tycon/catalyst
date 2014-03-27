@@ -8,6 +8,8 @@ sig
   sharing type Var.t = VE.Var.t
   sharing type RelId.t = RE.SpecLang.RelId.t
   sharing type RelId.t = PRE.SpecLang.RelId.t
+  sharing type PrimitiveRelation.def =
+        PRE.SpecLang.PrimitiveRelation.def
   sharing ProjTypeScheme = RE.SpecLang.ProjTypeScheme
   sharing Bind = RE.SpecLang.Bind
   sharing RE.SpecLang = PRE.SpecLang

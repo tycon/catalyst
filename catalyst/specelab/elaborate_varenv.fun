@@ -23,6 +23,7 @@ struct
   structure RP = P.RelPredicate
   structure BP = P.BasePredicate
   structure TypeSpec = RelSpec.TypeSpec
+  structure PR = PrimitiveRelation
   structure SR = StructuralRelation
   structure SPSBinds = ApplicativeMap (
     structure Key = 
@@ -36,6 +37,17 @@ struct
       val layout = fn _ => Layout.empty
      end)
   structure SPSB = SPSBinds
+  structure PrimRE = ApplicativeMap (
+    structure Key =
+    struct
+      open RelId
+      val equal = eq
+    end
+    structure Value = 
+    struct
+      type t = PrimitiveRelation.def
+      val layout = fn _ => Layout.empty
+    end)
 
   val assert = Control.assert
   fun $ (f,arg) = f arg
@@ -59,30 +71,6 @@ struct
   val assertEmptyCs = fn cs => case cs of [] => ()
     | _ => raise (Fail "sort inference impossible")
     
-  
-  (*
-  fun bootStrapFreeRels (re : RE.t) =
-    let
-      val splRelId1 = RelId.fromString "qRm"
-      val splRelId2 = RelId.fromString "qRo"
-      val domainTyvar = Tyvar.newNoname {equality = false}
-      val rangeTyvar = Tyvar.newNoname {equality = false}
-      val relTy1 = RelTy.Tuple $ Vector.new2 
-        (TyD.makeTvar domainTyvar, TyD.makeTvar rangeTyvar)
-      val relTyS1 = RelTyS.generalize (Vector.new2 (domainTyvar,
-        rangeTyvar), relTy1)
-      val map = Vector.new0 ()
-      val re = RE.add re (splRelId1, {ty=relTyS1, map=map})
-      val relTy2 = RelTy.Tuple $ Vector.new3 
-        (TyD.makeTvar domainTyvar, TyD.makeTvar rangeTyvar,
-         TyD.makeTvar rangeTyvar)
-      val relTyS2 = RelTyS.generalize (Vector.new2 (domainTyvar,
-        rangeTyvar), relTy2)
-    in
-      RE.add re (splRelId2, {ty=relTyS2, map=map})
-    end
-  *)
-
   fun bootStrapBools (ve: VE.t) = 
     let
       val boolTyD = TyD.makeTconstr (Tycon.bool,[])
@@ -188,7 +176,9 @@ struct
       fun typeSynthRElem elem = case elem of
           Int i => TyD.makeTconstr (Tycon.intInf,[])
         | Bool b => TyD.makeTconstr (Tycon.bool,[])
-        | Var v => TyDBinds.find tyDB v 
+        | Var v => TyDBinds.find tyDB v handle 
+            TyDBinds.KeyNotFound _ => Error.bug $ "Type of "
+              ^(Var.toString v)^" not found"
       fun doIt (e1,e2) cons f = 
         let 
           val (cs1,tupTy1,e1') = elabRExpr (re,pre,tyDB,spsB,e1)
@@ -198,65 +188,106 @@ struct
           (mergecs [cs1,cs2,cs], tupTy, cons (e1',e2'))
         end
       val isParam = fn rid => SPSB.mem spsB rid
-      fun doItParamApp (rinst as RInst {rel=rid,...},x) = 
+      fun doItParamApp (rinst as RInst {rel=rid,...},tyd) = 
         let
           val {dom,range=svar} = SPSB.find spsB rid
-          val tyd = TyDB.find tyDB x handle 
-            TyDB.KeyNotFound _ => raise (Fail ("Var "
-              ^(Var.toString x)^" unknown"))
           val _ = case !dom of NONE => dom := SOME tyd
             | SOME tyd' => assert (TyD.sameType (tyd,tyd'),
                 "Inconsistent application of param: "
                 ^(RelId.toString rid))
           val expsort = TS.fromSVar svar
         in
-          (emptycs(), expsort, R (rinst,x))
+          (emptycs(), expsort, rinst)
         end
-      fun doItRInstApp (rinst as RInst {rel,args,...},x) =
+      fun doItPrimApp (rinst as RInst {rel,args, ...},tyd) =
         let
-          val argRels = Vector.map (args, 
-            fn (RInst {rel,...}) => rel)
-          val _ = assert (Vector.forall (argRels, isParam),
-            "Currently, only params should be used to instantiate\
-            \ relations\n")
           val relName = RelId.toString rel
-          val {ty=relTyS,...} = PRE.find pre rel handle
+          val argRels = Vector.map (args, 
+            fn (RInst {rel, ...}) => rel)
+          val rtov = Var.fromString o RelId.toString
+          val argTyDs =  Vector.map (argRels, fn r => 
+            let
+              val var = rtov r
+              val err = fn _ => raise (Fail $ "Primitive relation: "
+                ^relName^" applied to unknown: "^(Var.toString var))
+            in
+              TyDB.find tyDB var handle TyDB.KeyNotFound _ => err()
+            end)
+          (*
+           * All arguments of primitive relation are of polymorphic
+           * type
+           *)
+          val targs = Vector.concat[argTyDs, Vector.new1 tyd]
+          val {ty=relTyS, ...} = PRE.find pre rel
+          val relSS = PTS.instantiate (relTyS,targs)
+          val PSS.T {sort=ProjSort.T {sort, ...}, ...} = relSS
+          val SPS.ColonArrow (prD,prR) = sort
+          val expectedPrD = Vector.foldr (argTyDs,tyd,TyD.makeTarrow)
+          val err = fn _ => relName^" application failed typecheck.\n" 
+            ^ "Expected: " ^ (TyD.toString expectedPrD)^"\n" 
+            ^ "Got: "^(TyD.toString prD)^"\n"
+          val _ = assert (TyD.sameType (expectedPrD,prD),err())
+          val newRInst = RInst {rel=rel, args=args, targs=targs,
+            sargs=empty()}
+        in
+          (emptycs(), prR, newRInst)
+        end
+      exception Return of TS.cs list * TS.t * RelLang.instexpr
+      fun doItRInstApp (rinst as RInst {rel,args,...},tyd) =
+        let
+          val _ = if isParam rel 
+            then raise (Return $ doItParamApp (rinst,tyd))
+            else ()
+          val relName = RelId.toString rel
+          val {ty=relTyS, def} = PRE.find pre rel handle
             PRE.ParamRelNotFound _ => raise (Fail ("Inst of unknown\
-            \ relation " ^relName^" applied to "^(Var.toString x)))
+            \ prim/param relation " ^relName))
+          val _ = case def of 
+              PRE.Prim _ => raise (Return $ doItPrimApp (rinst,tyd))
+              (* Hack: For recursive applications. *)
+            | PRE.Bind Bind.BogusDef => raise CantInferType
+            | _ => ()
           val tyd' = PTS.domain relTyS
-          val tyd = TyDB.find tyDB x handle 
-            TyDB.KeyNotFound _ => raise (Fail ("Var "
-              ^(Var.toString x)^" unknown"))
           val targs = Vector.fromList (case (tyd,tyd') of 
               (TyD.Tconstr (tycon,targs), TyD.Tconstr (tycon', _)) =>
                 (assert (tyconEq (tycon,tycon'),"Relation "^relName
                 ^" applied to arg of wrong type"); targs)
             | (_,TyD.Tvar _) => [tyd]
-            | _ => Error.bug ("RelApp type mismatch: " ^ relName
-                ^ "applied to "^(Var.toString x)))
-          val sargs = Vector.map (argRels, fn (rid) => 
-              TS.fromSVar $ #range $ SPSB.find spsB rid) handle
-                SPSB.KeyNotFound _ => Error.bug ("Unknown relation"
-                  ^(RelId.toString rel))
+            | _ => Error.bug ("RelApp type mismatch: " ^ relName))
           val relSS = PTS.instantiate (relTyS,targs)
+          val PSS.T {sort=ProjSort.T {paramsorts, ...}, ...} = relSS
+          val argDomains = Vector.map (paramsorts, 
+            fn (SPS.ColonArrow (argTyd,_)) => argTyd)
+          val _ = assert (Vector.length args = Vector.length
+            argDomains, "Incorrectly instantiating "^relName)
+          val (argRanges, args') = Vector.unzip $ Vector.map2 
+            (args,argDomains, fn (arg,argD) =>
+              let
+                val (_,sort,arg') = doItRInstApp (arg,argD)
+              in
+                (sort,arg')
+              end)
+          (*
+           * sargs are instantiations for sort vars in param ranges.
+           * Since an arg instantiates param, sargs=argRanges
+           *)
+          val sargs = argRanges
           val ProjSort.T {paramsorts, sort = SPS.ColonArrow (_,expsort)} = 
             PSS.instantiate (relSS,sargs)
-          val _ = assert (Vector.length paramsorts = Vector.length
-            argRels, "Incorrectly instantiating "^relName)
-          val _ = Vector.foreach2(argRels,paramsorts, 
-            fn (rid,SPS.ColonArrow (tyd,_)) =>
-            let
-              val {dom,range} = SPSB.find spsB rid
-              val _ = case !dom of NONE => dom := SOME tyd
-                | SOME tyd' => assert (TyD.sameType (tyd,tyd'),
-                "Invalid inst with: " ^(RelId.toString rid))
-            in
-              ()
-            end)
-          val newRInst = RInst {rel=rel, args=args, targs=targs,
+          val newRInst = RInst {rel=rel, args=args', targs=targs,
             sargs=sargs}
         in
-          (emptycs(), expsort, R (newRInst,x))
+          (emptycs(), expsort, newRInst)
+        end handle Return z => z
+
+      val doItRInstApp = fn (rinst,x) =>
+        let
+          val tyd = TyDB.find tyDB x handle 
+            TyDB.KeyNotFound _ => raise (Fail ("Var "
+              ^(Var.toString x)^" unknown"))
+          val (cs,sort,rinst') = doItRInstApp (rinst,tyd)
+        in
+          (cs,sort,R (rinst',x))
         end
     in
       case rexpr of
@@ -264,9 +295,57 @@ struct
       | D v => doIt v D TS.unionType 
       | T els => (emptycs(), TS.Tuple $ Vector.toListMap (els, 
           (TS.T o typeSynthRElem)) ,rexpr)
-      | R (rinst as RInst {rel=relId,args,...},x) => if isParam relId 
-          then doItParamApp (rinst,x) 
-          else doItRInstApp (rinst,x)
+      | R (rinst,x) =>  doItRInstApp (rinst,x)
+    end
+
+  (*
+   * Populates PRE with type and def of primitive relation.
+   * Couple of dirty hacks here:
+   * 1. We use PRE to map both param and prim rels to their
+   * definitions. Therefore PRE is Param/Prim Rel Env
+   * 2. Sort of a prim rel should be 
+   *      S ::= T -> S | SPS
+   * To avoid defining a new type for sort of prim rels, we encode
+   * arrows as TyD arrows within the domain of SPS.
+   * Note that even prim rels have to be fully instantiated before
+   * they are applied. An instantiated prim rel has SPS as sort, just
+   * like any other relation. So, there is no change in the
+   * rule to type check relation application.
+   *)
+  fun elabPRBind (pre:PRE.t) {id,def} : PRE.t =
+    let
+      val newVarTyD = fn _ => TyD.makeTvar $ Tyvar.newNoname 
+        {equality=false}
+      fun bindVars tyDB (PR.Nary (v,def)) = bindVars 
+        (TyDB.add tyDB v $ newVarTyD()) def
+        | bindVars tyDB (PR.Nullary rexpr) = (tyDB,rexpr)
+      val (tyDB, rexpr) = bindVars TyDB.empty def
+      (*
+       * We elab all primitive relations before structural relations.
+       * So, we pass RE.empty.
+       *)
+      val (_,prRange,rexpr') = elabRExpr (RE.empty, pre, tyDB, 
+        SPSB.empty, rexpr)
+      fun doItDef (PR.Nary (v,def)) = 
+        let
+          val varTyD as TyD.Tvar tyvar = TyDB.find tyDB v
+          val (tyvars, prDomOp, def') = doItDef def
+          val prDom = case prDomOp of NONE => varTyD
+            | SOME tyd => TyD.makeTarrow (varTyD, tyd)
+          val prDef = PR.Nary (v,def')
+        in
+            (tyvar::tyvars, SOME prDom, prDef)
+        end
+        | doItDef (PR.Nullary _) = ([],NONE,PR.Nullary rexpr')
+      val (tyvars, SOME prDom,prDef) = doItDef def
+      val prSPS = SPS.ColonArrow (prDom,prRange)
+      val prSS = PSS.T {svars=empty(), 
+        sort = ProjSort.T {paramsorts=empty(), sort=prSPS}}
+      val prTS = PTS.T {tyvars=Vector.fromList tyvars, 
+        sortscheme=prSS}
+      val reldesc = {ty=prTS, def= PRE.Prim prDef}
+    in
+      PRE.add pre (id,reldesc)
     end
 
   fun elabSRBind (re: RE.t)(pre: PRE.t)(ve : VE.t) {id,params,map} =
@@ -305,7 +384,7 @@ struct
             ((con, valop, RelLang.Star newRInst), SOME relTyS)
           end
         | (SOME vars, RelLang.Expr rexpr) => 
-          let
+          (let
             val convid = Var.fromString (Con.toString con)
             val RefTyS.T {tyvars,refss,...} = VE.find ve convid handle
               VE.VarNotFound _ => Error.bug ("Constructor " ^
@@ -317,7 +396,21 @@ struct
             val tyDB = Vector.fold (unifyConArgs ve con vars, 
               TyDBinds.empty,
               fn ((_,var,tyD,_),tyDB) => TyDBinds.add tyDB var tyD)
-            val (cs,tupTy,rexpr') = elabRExpr (re,pre,tyDB,spsB,rexpr)
+            (*
+             * Hack : For structural relations with recursive
+             * occurances, we currently assume existence of a base
+             * case (with non-empty RHS) in order to infer its sort.
+             * We extend PRE with binding for current relation (id),
+             * mapping it to a bogus def. This is to identify
+             * recursive applications.
+             *)
+            val bogusDesc = {
+              ty = PTS.simple (empty(), SPS.ColonArrow
+                (TyD.makeTunknown(),TS.Tuple [])),
+              def = PRE.Bind $ Bind.BogusDef}
+            val extendedPRE = PRE.add pre (id,bogusDesc)
+            val (cs,tupTy,rexpr') = elabRExpr (re, extendedPRE, 
+                                      tyDB, spsB, rexpr)
             val _ = assertEmptyCs cs
             val relSPS = SPS.ColonArrow (datTyD, tupTy)
             val (svars, paramSPS) = Vector.unzip $ Vector.map 
@@ -334,12 +427,15 @@ struct
             val relTyS = PTS.generalize (tyvars,relSS)
           in
             ((con, valop, RelLang.Expr rexpr'), SOME relTyS)
-          end handle CantInferType => ((con, valop, rterm),relTySOp)
-        | _ => raise (Fail "Impossible case of rterm"))
+          end handle CantInferType => ((con, valop, rterm),relTySOp))
+        | _ => raise (Fail $ "Impossible case of valop-rterm :"
+                ^(case valop of NONE => "" 
+                  | SOME vars => Vector.toString Var.toString vars)
+                ^(RelLang.termToString rterm)))
       val pts = case relTySOp of NONE => raise CantInferType
         | SOME relTyS => relTyS 
       val bdef = Bind.makeBindDef (id,params,pts)
-      val pre' = PRE.add pre (id,{ty=pts, def = bdef})
+      val pre' = PRE.add pre (id,{ty=pts, def = PRE.Bind bdef})
 
       (* Second pass - make ground def; expand inductive defs*)
 
@@ -531,6 +627,8 @@ struct
               doItRelPred tyDB rp
           | _ => (emptycs(),phi)
         end
+      val mapFst = fn f => fn (x,y) => (f x,y)
+      val inv = fn (x,y) => (y,x)
       fun doItRefTy tyDB refty = case refty of 
           RefTy.Base (bv,tyd,phi) => 
             let
@@ -541,13 +639,26 @@ struct
         | RefTy.Arrow ((x,t1),t2) => 
           let
             val (cs1,t1') = doItRefTy tyDB t1
-            val tyd1 = RefTy.toTyD t1
-            val tyDB' = TyDB.add tyDB x tyd1
+            val tybinds = case t1 of
+              RefTy.Tuple _ => RefTy.decomposeTupleBind (x,t1)
+            | _ => Vector.new1 (x,t1)
+            val tydbinds = Vector.map (tybinds, fn (v,ty) =>
+              (v,RefTy.toTyD ty))
+            val tyDB' = Vector.fold (tydbinds, tyDB, 
+              fn ((x,tyd),tyDB) => TyDB.add tyDB x tyd)
             val (cs2,t2') = doItRefTy tyDB' t2
           in
             (List.concat [cs1,cs2], RefTy.Arrow ((x,t1'),t2'))
           end
-        | _ => (emptycs(), refty)
+        | RefTy.Tuple vts => inv $ mapFst RefTy.Tuple $ 
+            Vector.mapAndFold (vts, emptycs(), 
+              fn ((v,t),csAcc) => 
+                let
+                  val (cs,t') = doItRefTy tyDB t
+                  val cs' = List.concat [cs,csAcc]
+                in
+                  ((v,t'),cs')
+                end)
       val (cs,refty') = doItRefTy TyDB.empty refty
       val (solfn :SVar.t -> TS.t) = solvecs cs
       val sortedParams = Vector.map (SPSB.toVector spsB, 
@@ -570,16 +681,19 @@ struct
       refSS
     end
 
-  fun elaborate (Program.T {decs=decs}) (RelSpec.T {reldecs, typespecs}) =
+  fun elaborate (Program.T {decs=decs}) (RelSpec.T {reldecs, primdecs, 
+      typespecs}) =
     let
       val veWithBool = bootStrapBools VE.empty
       val initialVE = Vector.fold (decs,veWithBool,fn (dec,ve) =>
         case dec of Dec.Datatype datbinds => Vector.fold (datbinds, ve,
           fn (datbind,ve)   => elabDatBind ve datbind) 
           | _ => ve)
-      val initialRE = (*bootStrapFreeRels*) RE.empty
+      val initialPRE = Vector.fold (primdecs, PRE.empty, 
+        fn (PR.T primbind,pre) => elabPRBind pre primbind)
+      val initialRE =  RE.empty
       val (elabRE,elabPRE) = Vector.fold (reldecs, 
-        (initialRE, PRE.empty), fn(SR.T srbind,(re,pre)) => 
+        (initialRE, initialPRE), fn(SR.T srbind,(re,pre)) => 
           elabSRBind re pre initialVE srbind)
       val refinedVE = Vector.fold (RE.toVector elabRE, initialVE, 
         fn ((id,{ty,map}),ve) => Vector.fold (map, ve, 

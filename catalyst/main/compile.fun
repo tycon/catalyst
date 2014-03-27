@@ -133,7 +133,6 @@ val (z3_log,z3_log_close) = (fn stream =>
 
 structure VCE = VCEncode (structure VC = VC
                           val z3_log = z3_log)
-
 (* ------------------------------------------------- *)
 (*                 Lookup Constant                   *)
 (* ------------------------------------------------- *)
@@ -532,6 +531,9 @@ in
             fun $ (f,arg) = f arg
             infixr 5 $
             val speclang = specast
+            val _ = print "Specification Ast:\n"
+            val _ = Control.message (Control.Top, fn _ =>
+              SpecLang.RelSpec.layout specast)
             val (ve,re,pre) = Control.pass 
               {
                 display = Control.NoDisplay,
@@ -550,11 +552,6 @@ in
             val consty = VE.find ve consvid
             val ve = VE.add (VE.remove (VE.remove ve consvid) consvid')
               (consvid',consty)
-            (*
-            val _ = print "Specification Ast:\n"
-            val _ = Control.message (Control.Top, fn _ =>
-              SpecLang.RelSpec.layout specast)
-            *)
             val _ = print "Var Env:\n"
             val _ = Control.message (Control.Top, fn _ =>
               VE.layout ve)

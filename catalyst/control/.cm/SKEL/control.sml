@@ -1,2 +1,0 @@
-Skeleton 5
-ad"Control"jh6egp1d"ControlFlags"Cf5Cä¢Out"d"Date"ä¢List"d"Version"ä¢Layout"Naä¢Verbosity"h0begp1ä¢Time"f0f8ä¢Exn"ÿ2d"Real"Cÿ!ä¢Region"d"Process"ÿÿNbbd2åçğ±ÿf5Cd"Char"ÿ?d"String"d"SourcePos"ÿNf1ÿ%f1ä¢Int"Cf2ä¢File"ÿbÿ‚f2ÿƒä¢MLton"f6d"Ref"Cÿƒÿ2d"Regexp"ÿƒ,ÿNbd2egp2ÿƒ,d"Profile"f1ä¢Data"f2ÿ,ÿ„(f3d"HashSet"d"PropertyList"ÿNgp1c"CONTROL"

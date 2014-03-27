@@ -6,6 +6,7 @@ struct
   structure RI = RelId
   structure BP = Predicate.BasePredicate
   structure RP = Predicate.RelPredicate
+  structure PR = PrimitiveRelation
   structure L = Layout
   datatype result = Success | Undef | Failure
   structure Z3_Encode = Z3_Encode (structure Z3_FFI = Z3_FFI
@@ -70,10 +71,12 @@ struct
       val mkAnd = #mkAnd api
       val mkOr = #mkOr api
       val dischargeAssertion = #dischargeAssertion api
+      val mkQSingletonSet = #mkQSingletonSet api
       val mkQStrucRelApp = #mkQStrucRelApp api
       val mkQCrossPrd = #mkQCrossPrd api
       val mkBind = #mkBind api
       val assertBindEq = #assertBindEq api
+      val mkUAssertion = #mkUAssertion api
       (*
        * Maps to keep track of encoded values
        *)
@@ -89,14 +92,24 @@ struct
         (mkUninterpretedSort ())
       val constMap = HashTable.mkTable (MLton.hash, strEq) 
         (117, ConstNotFound)
+      (*
+       * bootStrapBools for constMap
+       *)
+      val _ = HashTable.insert constMap ("true",const_true)
+      val _ = HashTable.insert constMap ("false",const_false)
       val relMap = HashTable.mkTable (MLton.hash, strEq)
         (117, RelNotFound)
       fun getConstForVar v = (fn vstr => HashTable.lookup constMap vstr
         handle ConstNotFound => Error.bug ("Variable "^vstr^" undec\
           \lared despite processing tydbinds")) (Var.toString v)
-      fun getStrucRelForRelId rid = (fn rstr => HashTable.lookup relMap
-        rstr handle RelNotFound => Error.bug ("Rel "^rstr^" undec\
-          \lared despite processing tydbinds")) (RI.toString rid)
+      fun getStrucRelForRelId rid = (fn rstr => #sr $
+        HashTable.lookup relMap rstr handle RelNotFound => Error.bug 
+          ("Rel "^rstr^" undeclared despite processing tydbinds")) 
+          (RI.toString rid)
+      fun lookupRelId rid = (fn rstr => 
+        HashTable.lookup relMap rstr handle RelNotFound => Error.bug 
+          ("Rel "^rstr^" undeclared despite processing tydbinds")) 
+          (RI.toString rid)
       (*
        * Encoding functions
        * encodeConst and encodeStrucRel rely on uniqueness of 
@@ -128,10 +141,12 @@ struct
                 Record.toVector tydr, encodeTyD)
             | _ => Vector.new1 $ encodeTyD t1
           val sr = mkStrucRel (rstr,sorts)
-          val _ = HashTable.insert relMap (rstr,sr)
+          val _ = HashTable.insert relMap (rstr,{sr=sr, sorts=sorts})
         in
           sr
         end
+
+      (* ---- Encoding TyD binds and relations ---- *)
 
       fun processTyDBind (v:Var.t,tyd:TyD.t) = case tyd of 
         (*
@@ -144,6 +159,61 @@ struct
               (RI.fromString $ Var.toString v, tyd)
             else ignore $ encodeConst (v,tyd)
         | _ => ignore $ encodeConst (v,tyd)
+
+      fun processPrimEq (primR, def) =
+        let
+          (*
+           * tbinds of VC.t are already processed. So Z3 relation
+           * representing primR has been created already.
+           *)
+          val {sr,sorts} = lookupRelId primR
+          (* 
+           * primR is instantiated primitive relation. It has the
+           * following form:
+           *        primR = λv.rexpr
+           * If primR is represented as a relation with sort T0*T1* ..
+           * *Tn -> bool, then v has sort T0.
+           *)
+          val sort = Vector.sub (sorts,0)
+          val (PR.Nary (v,PR.Nullary rexpr)) = def
+          val vstr = Var.toString v
+          open RelLang
+          val isBV = fn x => Var.toString x = vstr
+          val areBVs = fn els => Vector.forall (els, fn el =>
+            case el of Var x => isBV x | _ => false)
+          val areNotBVs = fn els => Vector.forall (els, fn el =>
+            case el of Var x => not $ isBV x | _ => true)
+          val len = Vector.length
+          val encodeRelElem = fn (Int i) => mkInt i 
+            | Bool true => const_true | Bool false => const_false
+            | Var v => getConstForVar v
+          fun encodeQRelExpr (e:expr) : Z3_Encode.set =
+            case e of T els => 
+              (case (len els, areBVs els, areNotBVs els) of
+                (0,_,_) => mkNullSet ()
+              | (_,true,false) => mkQSingletonSet $ Vector.map (els,
+                  fn _ => sort)
+              | (_,false,true) => mkSingletonSet $ Vector.map (els,
+                  encodeRelElem)
+              | _ => Error.bug "In primitive relation definition, \
+                \ each rexpr atom should either contain all bvs or\
+                \ none")
+            | X (e1,e2) => mkCrossPrd (encodeQRelExpr e1, 
+                encodeQRelExpr e2)
+            | U (e1,e2) => mkUnion (encodeQRelExpr e1, 
+                encodeQRelExpr e2)
+            | D (e1,e2) => mkDiff (encodeQRelExpr e1, 
+                encodeQRelExpr e2)
+            | R (RInst {rel=rid, ...},x) =>if isBV x 
+              then mkQStrucRelApp $ getStrucRelForRelId rid
+              else mkStrucRelApp (getStrucRelForRelId rid, 
+                getConstForVar v)
+          val rhsSet = encodeQRelExpr rexpr
+          val lhsSet = mkQStrucRelApp sr
+          val eqAssn = mkSetEqAssertion (lhsSet,rhsSet)
+        in
+          dischargeAssertion eqAssn
+        end
 
       fun processBindEq (theR,def) =
         let
@@ -168,6 +238,16 @@ struct
           assertBindEq (theSet,bindSet)
         end
 
+      val _ = Vector.foreach (tydbinds, processTyDBind)
+      (* pre is rbinds of elaborated VC.t. Maps newRelNames to
+         instantiated definitions.*)
+      val _ = Vector.foreach (PRE.toVector pre, 
+        fn (r,{def,...}) => case def of
+            PRE.Bind bdef => processBindEq (r,bdef)
+          | PRE.Prim pdef => processPrimEq (r,pdef))
+
+      (* ---- Type refinement encoding begins ---- *)
+
       fun encodeBasePred (bp:BP.t) : Z3_Encode.assertion = 
         let
           open BP
@@ -181,14 +261,14 @@ struct
                 encodeBasePred bp2)
         end
 
-      fun encodeRelPred (rp:RP.t) : Z3_Encode.assertion =
+      fun encodeRelExpr (e:RelLang.expr) : Z3_Encode.set =
         let
           open RelLang
           val encodeRelElem = fn (Int i) => mkInt i 
             | Bool true => const_true | Bool false => const_false
             | Var v => getConstForVar v
-          fun encodeRelExpr (e:expr) : Z3_Encode.set =
-            case e of T els => (case Vector.length els of
+        in
+          case e of T els => (case Vector.length els of
                 0 => mkNullSet ()
               | _ => mkSingletonSet $ Vector.map (els,
                   encodeRelElem))
@@ -200,6 +280,11 @@ struct
                 encodeRelExpr e2)
             | R (RInst {rel=rid, ...},v) => mkStrucRelApp (
                 getStrucRelForRelId rid, getConstForVar v)
+        end
+
+      fun encodeRelPred (rp:RP.t) : Z3_Encode.assertion =
+        let
+          open RelLang
           val f = encodeRelExpr
           open RP
         in
@@ -230,10 +315,7 @@ struct
           VC.Simple sp => assertSimplePred sp
         | VC.Conj spv => Vector.foreach (spv,assertVCPred)
         | _ => dischargeAssertion $ encodeVCPred vcp
-     
-      val _ = Vector.foreach (tydbinds, processTyDBind)
-      val _ = Vector.foreach (PRE.toVector pre, 
-        fn (r,{def,...}) => processBindEq (r,def))
+
       val _ = assertVCPred anteP
       (*
        * We check the SAT of ¬conseqP

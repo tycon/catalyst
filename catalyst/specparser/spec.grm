@@ -31,11 +31,14 @@ infixr 5 $
   Lex functor is constructed to expect TOKENS signature 
   constructed from following declarations
  *)
-%term   RELATION
+%term   PRIMITIVE
+      | RELATION
       | TRUE
       | FALSE
       | ASSUME
       | NOT
+      | LAMBDA
+      | DOT
       | PLUS
       | MINUS
       | UNION
@@ -68,6 +71,8 @@ infixr 5 $
   | spec of RelSpec.t
   | decsandtys of RelSpec.t
   | reldec of StructuralRelation.t
+  | primdec of PrimitiveRelation.t 
+  | primdef of PrimitiveRelation.def
   | params of RelId.t list
   | paramseq of RelId.t list
   | patmatchseq of (Con.t * Var.t vector option * term) list
@@ -106,15 +111,37 @@ start : spec (spec)
 spec:   decsandtys (decsandtys)
 
 decsandtys : reldec SEMICOLON decsandtys 
-                (case decsandtys of RelSpec.T ({reldecs,typespecs}) => 
-                    RelSpec.T {reldecs = Vector.fromList (reldec ::
-                      (Vector.toList reldecs)), typespecs = typespecs})
+                (case decsandtys of RelSpec.T ({reldecs, primdecs, 
+                  typespecs}) => 
+                    RelSpec.T {
+                      reldecs = Vector.fromList (reldec ::
+                        (Vector.toList reldecs)), 
+                      primdecs = primdecs,
+                      typespecs = typespecs})
+           | primdec SEMICOLON decsandtys 
+                (case decsandtys of RelSpec.T ({reldecs, primdecs, 
+                  typespecs}) => 
+                    RelSpec.T {primdecs = Vector.fromList (primdec ::
+                        (Vector.toList primdecs)), 
+                      reldecs=reldecs, 
+                      typespecs = typespecs})
            | typespec SEMICOLON decsandtys
-                (case decsandtys of RelSpec.T {reldecs,typespecs} => 
-                    RelSpec.T {reldecs = reldecs, typespecs = 
-                    Vector.fromList (typespec :: (Vector.toList typespecs))})
+                (case decsandtys of RelSpec.T {reldecs, primdecs, 
+                  typespecs} => 
+                    RelSpec.T {reldecs = reldecs, primdecs=primdecs,
+                      typespecs = Vector.fromList (typespec :: 
+                          (Vector.toList typespecs))})
            |  (RelSpec.T {reldecs = Vector.fromList [],
+                  primdecs = Vector.new0 (),
                   typespecs = Vector.fromList []})
+
+primdec : PRIMITIVE RELATION ID EQUALOP primdef (PrimitiveRelation.T
+                    {id=RelId.fromString ID, 
+                    def=PrimitiveRelation.alphaRename primdef})
+
+primdef : rexpr (PrimitiveRelation.Nullary rexpr)
+        | LAMBDA ID DOT primdef (PrimitiveRelation.Nary
+                (Var.fromString ID, primdef))
 
 reldec : RELATION ID patmatchseq 
           (StructuralRelation.T {id=RelId.fromString ID,

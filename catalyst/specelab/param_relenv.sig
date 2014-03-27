@@ -5,9 +5,12 @@ end
 signature PARAM_REL_ENV = 
 sig
   include PARAM_REL_ENV_STRUCTS
+
+ datatype def = Prim of SpecLang.PrimitiveRelation.def
+           | Bind of SpecLang.Bind.def
   
   type reldesc = { ty : SpecLang.ProjTypeScheme.t,
-                   def : SpecLang.Bind.def}
+                   def : def}
   exception ParamRelNotFound of SpecLang.RelId.t
   type t
   val empty : t

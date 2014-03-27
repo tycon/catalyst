@@ -23,11 +23,14 @@ ws=[\ \t];
 
 <INITIAL>{eol} => (line := (!line)+1; lex());
 <INITIAL>{ws}+ => (debug "whitespace"; lex());
+<INITIAL>("primitive") => (debug "primitive"; Tokens.PRIMITIVE(!line,yypos));
 <INITIAL>("relation") => (debug "relation"; Tokens.RELATION(!line,yypos));
 <INITIAL>("true") => (debug "true"; Tokens.TRUE(!line,yypos));
 <INITIAL>("assume") => (debug "assume"; Tokens.ASSUME(!line,yypos));
 <INITIAL>("false") => (debug "false"; Tokens.FALSE(!line,yypos));
 <INITIAL>("not") => (debug "not"; Tokens.NOT(!line,yypos));
+<INITIAL>("\\") => (debug "lambda"; Tokens.LAMBDA(!line,yypos));
+<INITIAL>(".") => (debug "dot"; Tokens.DOT(!line,yypos));
 <INITIAL>("+") => (debug "plus"; Tokens.PLUS(!line,yypos));
 <INITIAL>("-") => (debug "minus"; Tokens.MINUS(!line,yypos));
 <INITIAL>("U") => (debug "union"; Tokens.UNION(!line,yypos));
