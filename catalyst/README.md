@@ -3,6 +3,9 @@ Catalyst
 A relational specification framework implemented as a 
 dependent type system for ML.
 
+New: Web interface to catalyst is now available! -
+  http://tycon.github.io/catalyst
+
 
 To Run
 ========
