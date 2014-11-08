@@ -20,6 +20,7 @@ val COLON:  'a * 'a -> (svalue,'a) token
 val DISJ:  'a * 'a -> (svalue,'a) token
 val CONJ:  'a * 'a -> (svalue,'a) token
 val IFF:  'a * 'a -> (svalue,'a) token
+val HOLE:  'a * 'a -> (svalue,'a) token
 val IMP:  'a * 'a -> (svalue,'a) token
 val EQUALOP:  'a * 'a -> (svalue,'a) token
 val SUBSET:  'a * 'a -> (svalue,'a) token

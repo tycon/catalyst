@@ -1,2 +1,0 @@
-Skeleton 5
-ae"FrontEnd"i1a‰¢S"gp1c"FRONT_END_STRUCTS"jh5Cegp1ˇf7d"In"‰¢Ast"Cd"File"d"Region"d"Source"d"Trace"d"Control"Na‰¢LrVals"jh2a‰¢Token"gp2‰¢LrParser"ˇÅ<aˇ;gp1ˇ;gp1e"MLLrValsFun"a‰¢Lex"jh1a‰¢Tokens"gp2ˇÅ/ˇÇ9gp1e"MLLexFun"ad"Parse"jh3a‰¢ParserData"gp2ˇÅ/ˇÉ&aˇÇ/gp1ˇÇ/aˇÇgp1ˇÇgp1e"JoinWithArg"Ngp1c"FRONT_END"

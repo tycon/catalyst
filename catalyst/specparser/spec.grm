@@ -43,6 +43,7 @@ infixr 5 $
       | SUBSET
       | EQUALOP
       | IMP
+      | HOLE
       | IFF
       | CONJ
       | DISJ
@@ -209,6 +210,7 @@ pred :  patom (patom)
      |  patom DISJ pred (Predicate.Disj (patom,pred))
 
 patom : TRUE (Predicate.truee())
+      | HOLE (Predicate.newHole() )
       | NOT patom (Predicate.Not patom)
       | LPAREN pred RPAREN (pred)
       | rpatom (Predicate.Rel rpatom)

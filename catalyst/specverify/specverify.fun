@@ -608,21 +608,17 @@ struct
     let
       fun elabRecDecs (ve : VE.t) (tyvars : Tyvar.t vector)  decs = 
         Vector.fold (decs,ve, fn ({lambda : Lambda.t, var : Var.t},ve) =>
-          let
-            val {arg,argType,body} = Lambda.dest lambda
-            val argTyD = Type.toMyType argType
-            val bodyTyD = Type.toMyType $ Exp.ty body
-            val funTyD = TyD.makeTarrow (argTyD,bodyTyD)
-            val funTyS = VE.find ve var handle (VE.VarNotFound _) => 
-                RefTyS.generalize (Vector.new0 (), RefTy.fromTyD
-                  funTyD)
-            val funRefTy = mergeTypes (funTyD, RefTyS.specialize
-                funTyS) 
-            val funspec = RefTyS.generalizeAssump (tyvars,funRefTy,
-              RefTyS.isAssumption funTyS)
-          in
-            VE.add ve (var,funspec)
-          end)
+          if VE.mem ve var then ve else (* add trivial ref type *)
+            let
+              val {arg,argType,body} = Lambda.dest lambda
+              val argTyD = Type.toMyType argType
+              val bodyTyD = Type.toMyType $ Exp.ty body
+              val funTyD = TyD.makeTarrow (argTyD,bodyTyD)
+              val funTyS = RefTyS.generalizeAssump (tyvars,
+                RefTy.fromTyD funTyD, true)
+            in
+              VE.add ve (var,funTyS)
+            end)
 
       fun doItDec (ve : VE.t, dec : Dec.t) : (VC.t vector * VE.t) = case dec of
           Dec.Fun {decs,tyvars} => 

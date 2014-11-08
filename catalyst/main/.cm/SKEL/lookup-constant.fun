@@ -1,2 +1,0 @@
-Skeleton 5
-ae"LookupConstant"i1aä¢S"gp1c"LOOKUP_CONSTANT_STRUCTS"jh6egp1ÿCbegp1ä¢Const"d2aä¢RealX"gp1ÿaä¢WordX"gp1ÿf2d"Int"ä¢Bool"aä¢WordSize"gp2ÿÿ=begp1d"Control"f1ä¢Ffi"f5Cd"In"ÿ‚"d"Out"ÿ5d"Char"Cd"List"d"String"ÿd"Error"ÿCÿd"HashSet"d"ConstType"d"IntInf"ÿ=NNgp1c"LOOKUP_CONSTANT"

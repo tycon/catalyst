@@ -36,6 +36,7 @@ ws=[\ \t];
 <INITIAL>("C") => (debug "subset"; Tokens.SUBSET(!line,yypos));
 <INITIAL>("=") => (debug "equalop";Tokens.EQUALOP(!line,yypos));
 <INITIAL>("=>") => (debug "implies";Tokens.IMP(!line,yypos));
+<INITIAL>("??") => (debug "hole";Tokens.HOLE(!line,yypos));
 <INITIAL>("<=>") => (debug "iff";Tokens.IFF(!line,yypos));
 <INITIAL>("/\\") => (debug "conj";Tokens.CONJ(!line,yypos));
 <INITIAL>("\\/") => (debug "disj";Tokens.DISJ(!line,yypos));

@@ -123,6 +123,7 @@ structure SpecVerify = SpecVerify (structure VE = VE
 
 structure VC = SpecVerify.VC
 
+(*
 val (z3_log,z3_log_close) = (fn stream => 
   (fn str => (Out.output (stream,str);
       Out.flush stream), 
@@ -131,6 +132,7 @@ val (z3_log,z3_log_close) = (fn stream =>
 
 structure VCE = VCEncode (structure VC = VC
                           val z3_log = z3_log)
+*)
 
 (* ------------------------------------------------- *)
 (*                 Lookup Constant                   *)
@@ -572,8 +574,9 @@ in
               output $ Layout.str "Elaborated VarEnv:\n";
               output $ VE.layout ve;
               VC.layouts (vcs,output))
-            (*val _ = Control.saveToFile ({suffix = "vcs"}, No, vcs,
-                                      Layouts layouts)*)
+            val _ = Control.saveToFile ({suffix = "vcs"}, No, vcs,
+                                      Layouts layouts)
+            (*
             val elabvcs = Control.pass 
               {
                 display = Control.NoDisplay,
@@ -607,6 +610,7 @@ in
                 thunk = (fn () => Vector.foreachi (elabvcs,dischargeVC))
               }
             val _ = z3_log_close ()
+            *)
          in
             print $ (!Control.inputFile)^" is correct w.r.t given specification!\n"
          end

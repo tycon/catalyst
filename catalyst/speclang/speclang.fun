@@ -2,6 +2,7 @@ functor SpecLang (S : SPEC_LANG_STRUCTS) : SPEC_LANG =
 struct
   open S
   structure L = Layout
+  structure TyD = TypeDesc
 
   fun $ (f,arg) = f arg
   infixr 5 $
@@ -186,6 +187,8 @@ struct
     open Map
   end
 
+  structure TyDB = TyDBinds
+
   structure Predicate =
   struct
     structure BasePredicate =
@@ -245,8 +248,48 @@ struct
       fun applySubst subst t = exprMap t 
         (RelLang.applySubsts $ Vector.new1 subst)
     end
+
+    structure Hole =
+    struct
+      type id = string
+      datatype t =  T of {substs: (Var.t * Var.t) list,
+                          bv:Var.t,
+                          id:id,
+                          env:TyDBinds.t}
+
+      fun make (a,b,c,d) = T {substs=a, bv=b, id=c, env=d}
+      val symbase = "??"
+      val count = ref 0
+      fun new () = 
+        let
+          val id = symbase ^ (Int.toString (!count))
+          val _ = count := !count + 1
+          val dummybv = Var.fromString id
+        in
+          make ([],dummybv,id,TyDBinds.empty)
+        end
+
+      fun toString (T {substs, bv, id, env=tyDB}) =
+        let
+          val subs = List.toString (fn (v1,v2) => 
+            "["^ (Var.toString v1) ^ "/" ^ (Var.toString v2) ^"]")
+            substs
+          val bvStr = Var.toString bv
+          val tyDBStr = L.toString $ TyDBinds.layout tyDB
+          val clos = "("^id^ "("^bvStr ^"), "^tyDBStr^ ")"
+        in
+          subs ^ " " ^ clos
+        end
+
+      fun idOf (T {id, ...}) = id
+
+      fun applySubst subst (T {substs,bv,id,env}) =
+        make (subst::substs, bv, id, env)
+    end
+
     datatype t =  True
                |  False
+               |  Hole of Hole.t
                |  Base of BasePredicate.t 
                |  Rel of RelPredicate.t
                |  Exists of TyDBinds.t * t
@@ -260,6 +303,7 @@ struct
     fun layout t = case t of
         True => L.str "true" 
       | False => L.str "false" 
+      | Hole h => L.str $ Hole.toString h
       | Base bp => L.str $ BasePredicate.toString bp
       | Rel rp => L.str $ RelPredicate.toString rp 
       | Exists (binds,t) => Pretty.nest ("exist",(TyDBinds.layout binds),
@@ -278,6 +322,8 @@ struct
 
     fun truee _ = True
 
+    fun newHole _ = Hole $ Hole.new ()
+
     fun falsee _ = False
 
     fun isFalse False = true | isFalse _ = false
@@ -293,6 +339,7 @@ struct
     fun applySubst (subst as (new,old)) t = case t of
         True => True
       | False => False
+      | Hole h => Hole (Hole.applySubst subst h)
       | Base bp => Base (BasePredicate.applySubst subst bp)
       | Rel rp => Rel (RelPredicate.applySubst subst rp)
       | Exists (tyDB,t) => if (TyDBinds.mem tyDB old)
@@ -347,6 +394,12 @@ struct
         | tyD => Base (genVar(), tyD, Predicate.truee())
       end
 
+    fun toTyD t = case t of
+        Base (v,t,p) => t
+      | Tuple tv => TyD.makeTrecord $ Vector.map (tv,fn (v,t) => 
+          (Field.Symbol $ Field.Symbol.fromString $ Var.toString v, 
+           toTyD t))
+      | Arrow ((v1,t1),t2) => TyD.makeTarrow (toTyD t1, toTyD t2)
     
     fun layout rty = case rty of
           Base(var,td,pred) => L.seq [L.str ("{" ^ (Var.toString var) 
@@ -387,6 +440,25 @@ struct
     val exnTyp = fn _ => Base (genVar(),TypeDesc.makeTunknown (),
       Predicate.falsee())
 
+    val newLongVar = fn (var,fld) => Var.fromString $
+        (Var.toString var)^"."^(Var.toString fld)
+    (*
+     * Decomposes single tuple bind of form v ↦ {x0:T0,x1:T1} to
+     * multiple binds : [v.x0 ↦ T0, v.x1 ↦ T1]
+     *)
+    fun decomposeTupleBind (tvar : Var.t, tty as Tuple 
+      refTyBinds) : (Var.t*t) vector =
+      let
+        val bindss = Vector.map (refTyBinds, 
+          fn (refTyBind as (_,refTy)) => 
+            case refTy of 
+              Tuple _ => decomposeTupleBind refTyBind
+            | _ => Vector.new1 refTyBind)
+        val binds = Vector.map (Vector.concatV bindss, 
+          fn (v,ty) => (newLongVar (tvar,v), ty))
+      in
+        binds
+      end
   end
 
   structure RefinementTypeScheme =

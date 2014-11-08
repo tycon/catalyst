@@ -14,6 +14,7 @@ sig
 
   datatype simple_pred =  True
                        |  False
+                       |  Hole of Predicate.Hole.t
                        |  Base of Predicate.BasePredicate.t 
                        |  Rel of Predicate.RelPredicate.t
 

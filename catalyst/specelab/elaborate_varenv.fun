@@ -17,6 +17,7 @@ struct
   structure RP = P.RelPredicate
   structure BP = P.BasePredicate
   structure TypeSpec = RelSpec.TypeSpec
+  structure L = Layout
 
   val assert = Control.assert
   fun $ (f,arg) = f arg
@@ -78,6 +79,10 @@ struct
       Vector.fold (cons, ve, elabCon)
     end
 
+  (* -- Function duplicated from SpecVerify -- *)
+  val newLongVar = fn (var,fld) => Var.fromString $
+    (Var.toString var)^"."^(Var.toString fld)
+
   fun unifyConArgs (ve : VE.t) (con : Con.t) (vars : Var.t vector) =
     let
       val conStr = Con.toString con
@@ -86,9 +91,6 @@ struct
       val conTy = RefTyS.specialize (VE.find ve convid)
         handle (VE.VarNotFound v) => Error.bug ("Could not find constructor "
           ^ conStr  ^ " in varenv\n")
-      (* -- Function duplicated from SpecVerify -- *)
-      val newLongVar = fn (var,fld) => Var.fromString $
-        (Var.toString var)^"."^(Var.toString fld)
       open RefTy
     in
       case conTy of 
@@ -247,6 +249,177 @@ struct
       RE.add re (id,{ty=ty',map=map'})
     end
 
+  fun elabHolesInRefTy (refTy : RefTy.t) : RefTy.t = 
+    let
+      fun doItPhi (bv:Var.t) tyDB phi = 
+        let
+          fun doItTup (p1,p2) =
+              (doItPhi bv tyDB p1, doItPhi bv tyDB p2)
+        in
+           case phi of
+            P.Conj x => P.Conj $ doItTup x | P.Disj x => P.Disj $ doItTup x
+          | P.If x => P.If $ doItTup x | P.Iff x => P.Iff $ doItTup x
+          | P.Not t => P.Not $ doItPhi bv tyDB t
+          | P.Hole hole => P.Hole $ P.Hole.make ([], bv, 
+              P.Hole.idOf hole, tyDB)
+          | _ => phi
+        end
+
+      fun doItRefTy tyDB refty = case refty of 
+        RefTy.Base (bv,tyd,phi) => 
+          let
+            val phi'= doItPhi bv (TyDB.add tyDB bv tyd) phi
+          in
+            RefTy.Base (bv,tyd,phi')
+          end 
+      | RefTy.Arrow ((x,t1),t2) => 
+        let
+          val t1' = doItRefTy tyDB t1
+          val tybinds = case t1 of
+            RefTy.Tuple _ => RefTy.decomposeTupleBind (x,t1)
+          | _ => Vector.new1 (x,t1)
+          val tydbinds = Vector.map (tybinds, fn (v,ty) =>
+            (v,RefTy.toTyD ty))
+          val tyDB' = Vector.fold (tydbinds, tyDB, 
+            fn ((x,tyd),tyDB) => TyDB.add tyDB x tyd)
+          val t2' = doItRefTy tyDB' t2
+        in
+          RefTy.Arrow ((x,t1'),t2')
+        end
+      | RefTy.Tuple vts =>  RefTy.Tuple $ 
+          Vector.map (vts, fn (v,t) => (v,doItRefTy tyDB t))
+    in
+      doItRefTy TyDBinds.empty refTy
+    end
+
+  (*
+   * Produces a refTy' with base types taken from TyD and
+   * refinements from refTy, given that user-provided base
+   * types in refTy are unifiable with base types in tyd
+   * Caution : tyvar unification is not uniform. 
+   *)
+  fun mergeTypes (tyd : TyD.t, refTy : RefTy.t) : RefTy.t =
+    let
+      open TyD
+      open RefTy
+      fun isTupleTyD (row : 'a Record.t) = 
+        (*
+         * SML tuples are records with consecutive numeric
+         * fields starting with 1.
+         *)
+        let 
+          val lbltydv = Record.toVector row 
+        in
+          case Vector.length lbltydv of 0 => true 
+          | _ => Vector.foralli (lbltydv, fn (i,(lbl,_)) => 
+              Field.toString lbl = Int.toString (i+1))
+        end
+      fun mergeErrorMsg (tyd,tyd') = "Cannot merge ML type " ^ (TyD.toString tyd)
+        ^ " with type given in spec: " ^ (TyD.toString tyd')
+      fun doMerge (tyd:TyD.t) (argBind as (argv: Var.t, refTy:RefTy.t)) = 
+        case (tyd,refTy) of
+          (_,Base (bv,tyd',pred)) => 
+            let
+              val _ = assert (unifiable (tyd,tyd'),
+                mergeErrorMsg(tyd,tyd'))
+              val newArgBind = (argv, Base (bv,tyd,pred))
+            in
+              (Vector.new0 (), newArgBind)
+            end 
+        | (Trecord tydr, Tuple argBinds') => (case isTupleTyD tydr of
+            true =>
+              let
+                val (substss,newArgBinds') = (Vector.unzip o Vector.map2) 
+                  (Record.toVector tydr, argBinds', 
+                  fn ((lbl,tyd'),argBind' as (argv',refty')) => 
+                    let
+                      (*
+                       * Argvar for tuple fields used in spec should be 
+                       * substituted with field label.
+                       *)
+                      val newargv' = Var.fromString $ Field.toString lbl
+                      val (substs,newArgBind) = doMerge tyd' (newargv',refty')
+                      val substs = Vector.concat [Vector.new1 (newargv',argv'), 
+                        substs]
+                    in
+                      (substs,newArgBind)
+                    end)
+                val substs = Vector.map (Vector.concatV substss,
+                  fn (n,ol) =>  (newLongVar (argv,n), ol))
+                val newArgBind = (argv, Tuple newArgBinds')
+              in
+                (substs, newArgBind)
+              end
+          | false => raise (Fail "Unimpl"))
+        | (Tarrow (tyd1,tyd2), Arrow (argBind,resTy)) => 
+            let
+              val (substs,argBind') = doMerge tyd1 argBind
+              val dummyArgVar = argv
+              val (_,(_,resTy')) = doMerge tyd2 (dummyArgVar, 
+                RefTy.applySubsts substs resTy)
+              val newArgBind = (argv, Arrow (argBind',resTy'))
+            in
+              (Vector.new0 (), newArgBind)
+            end
+        | _ => Error.bug ("Types Merge Error. Cannot merge\n"
+          ^ "1. "^(L.toString $ RefTy.layout refTy)^", \n"
+          ^ "2. "^(TyD.toString tyd)^"\n")
+      val dummyArgVar = Var.fromString "dummy"
+      val (_,(_,refTy')) = doMerge tyd (dummyArgVar, refTy)
+    in
+      refTy'
+    end
+
+
+  (*
+   * Forall top-level fun decs, elabDecs annotates their ML
+   * types with type refinements 
+   *)
+  fun elabDecs (ve :VE.t, decs : Dec.t vector) : VE.t =
+    let
+      fun elabRecDecs (ve : VE.t) (tyvars : Tyvar.t vector)  decs = 
+        Vector.fold (decs,ve, fn ({lambda : Lambda.t, var : Var.t}, ve) =>
+          let
+            val {arg,argType,body} = Lambda.dest lambda
+            val argTyD = Type.toMyType argType
+            val bodyTyD = Type.toMyType $ Exp.ty body
+            val funTyD = TyD.makeTarrow (argTyD,bodyTyD)
+            val funTyS = VE.find ve var handle (VE.VarNotFound _) => 
+              RefTyS.generalize (Vector.new0 (), RefTy.fromTyD
+                funTyD)
+            val funRefTy = elabHolesInRefTy $ mergeTypes (funTyD, 
+              RefTyS.specialize funTyS) 
+            val funspec = RefTyS.generalizeAssump (tyvars,funRefTy,
+              RefTyS.isAssumption funTyS)
+          in
+            VE.add ve (var,funspec)
+          end)
+
+      fun elabDec (ve : VE.t, dec : Dec.t) : VE.t = 
+        case dec of
+          Dec.Fun {decs,tyvars} => 
+          let
+            val extendedVE = elabRecDecs ve (tyvars()) decs
+          in
+            extendedVE
+          end
+        | Dec.Val {rvbs,tyvars,vbs} => 
+          let
+            val rvbsVE = elabDec (ve,Dec.Fun {decs=rvbs,tyvars=tyvars})
+            (*val vbsVE = Vector.mapAndFold (vbs,rvbsVE,
+              fn ({valbind,...},ve) => doItValBind
+              (ve,tyvars(),valbind))*)
+          in
+            rvbsVE
+          end 
+        | _ => ve
+
+      val extendedVE = Vector.fold (decs, ve, 
+        fn (dec,ve) => elabDec (ve, dec))
+    in
+      extendedVE
+    end
+
   fun elaborate (Program.T {decs=decs}) (RelSpec.T {reldecs, typespecs}) =
     let
       val veWithBool = bootStrapBools VE.empty
@@ -264,9 +437,11 @@ struct
         fn ((id,{ty,map}),ve) => Vector.fold (map, ve, 
           fn (conPatBind,ve) => addRelToConTy ve conPatBind id))
       val fullVE = Vector.fold (typespecs, refinedVE, 
-        fn (TypeSpec.T (isAssume,f,refTy),ve) => VE.add ve
-        (f,RefTyS.generalizeAssump (Vector.new0 (), refTy, isAssume)))
+        fn (TypeSpec.T (isAssume,f,refTy),ve) => 
+            VE.add ve (f,RefTyS.generalizeAssump (Vector.new0 (), 
+              refTy, isAssume)))
+      val elabVE = elabDecs (fullVE, decs)
     in
-      (fullVE,elabRE)
+      (elabVE,elabRE)
     end
 end

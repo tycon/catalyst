@@ -90,8 +90,24 @@ sig
       val toString : t -> string
       val applySubst : (Var.t * Var.t) -> t -> t
     end
+
+    structure Hole :
+    sig
+      type id
+      datatype t =  T of {substs: (Var.t * Var.t) list,
+                          bv:Var.t,
+                          id:id,
+                          env:TyDBinds.t}
+      val new : unit -> t
+      val make : (Var.t * Var.t) list * Var.t * id * TyDBinds.t -> t
+      val idOf : t -> id
+      val applySubst : (Var.t * Var.t) -> t -> t
+      val toString : t -> string
+    end
+
     datatype t =  True
                |  False
+               |  Hole of Hole.t
                |  Base of BasePredicate.t 
                |  Rel of RelPredicate.t
                |  Exists of TyDBinds.t * t
@@ -104,6 +120,7 @@ sig
 
     val layout : t -> Layout.t 
     val truee : unit -> t
+    val newHole : unit -> t
     val falsee : unit -> t
     val isFalse : t -> bool
     val baseP : BasePredicate.t -> t 
@@ -134,6 +151,7 @@ sig
                (* Needs extension for {'a | r} list *)
     val layout : t -> Layout.t 
     val fromTyD : TypeDesc.t -> t
+    val toTyD : t -> TypeDesc.t
     val applySubsts : (Var.t * Var.t) vector -> t -> t
     val alphaRename : t -> t
     val alphaRenameToVar : t -> Var.t -> t
@@ -141,6 +159,8 @@ sig
           (Var.t * TypeDesc.t * Predicate.t)) -> t
     val mapTyD : t -> (TypeDesc.t -> TypeDesc.t) -> t
     val exnTyp : unit -> t
+    (* pre-condition: input t must be a Tuple _ *)
+    val decomposeTupleBind : Var.t*t -> (Var.t*t) vector
       
   end
 

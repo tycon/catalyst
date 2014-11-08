@@ -5,6 +5,7 @@ struct
   structure P = Predicate
   structure BP = Predicate.BasePredicate
   structure RP = Predicate.RelPredicate
+  structure Hole = Predicate.Hole
   structure RelId = RelLang.RelId
   structure RefTy = RefinementType
   structure RefTyS = RefinementTypeScheme
@@ -22,6 +23,7 @@ struct
 
   datatype simple_pred = True
                        | False
+                       | Hole of Hole.t
                        | Base of BP.t 
                        | Rel of RP.t
 
@@ -71,6 +73,7 @@ struct
   fun coercePTtoT (pt:P.t) : vc_pred = case pt of
       P.True => Simple True
     | P.False => Simple False
+    | P.Hole h => Simple $ Hole h
     | P.Base p => Simple $ Base p
     | P.Rel p => Simple $ Rel p
     | P.Not p => negate $ coercePTtoT p
@@ -418,6 +421,7 @@ struct
       fun laytSimplePred sp = case sp of 
           True => L.str "true"
         | False => L.str "false"
+        | Hole h => L.str $ Hole.toString h
         | Base bp => L.str $ BP.toString bp
         | Rel rp => L.str $ RP.toString rp
 
