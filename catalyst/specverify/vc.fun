@@ -17,6 +17,7 @@ struct
   structure L = Layout
 
   exception TrivialVC (* raised when antecedent has false *)
+  exception HoleNotFound (* raised by hash from holeId to sol *)
 
   type tydbind = Var.t * TyD.t
   type tydbinds = tydbind vector
@@ -412,30 +413,30 @@ struct
       T (tydbinds',anteP',conseqP')
     end
 
+    fun laytSimplePred sp = case sp of 
+        True => L.str "true"
+      | False => L.str "false"
+      | Hole h => L.str $ Hole.toString h
+      | Base bp => L.str $ BP.toString bp
+      | Rel rp => L.str $ RP.toString rp
+
+    fun laytVCPred vcpred = case vcpred of 
+      Simple p => laytSimplePred p
+    | Conj vcv => L.align $ Vector.toListMap (vcv,
+        laytVCPred)
+    | Disj vcv => L.align $ Vector.toListMap (vcv,
+        fn vc => L.seq [L.str "OR [",laytVCPred vc, L.str "]"])
+    | Not vc => L.seq [L.str "NOT [", laytVCPred vc, L.str "]"]
+    | If (vc1,vc2) => L.seq [laytVCPred vc1, L.str " => ", 
+          laytVCPred vc2]
+    | Iff (vc1,vc2) => L.seq [laytVCPred vc1, L.str " <=> ", 
+          laytVCPred vc2]
+
   fun layout (vcs : t vector) =
     let
       fun laytTyDBinds tybinds = L.vector (Vector.map (tybinds,
         fn (v,tyd) => L.str ((Var.toString v) ^ " : " ^ 
           (TyD.toString tyd))))
-
-      fun laytSimplePred sp = case sp of 
-          True => L.str "true"
-        | False => L.str "false"
-        | Hole h => L.str $ Hole.toString h
-        | Base bp => L.str $ BP.toString bp
-        | Rel rp => L.str $ RP.toString rp
-
-      fun laytVCPred vcpred = case vcpred of 
-          Simple p => laytSimplePred p
-        | Conj vcv => L.align $ Vector.toListMap (vcv,
-            laytVCPred)
-        | Disj vcv => L.align $ Vector.toListMap (vcv,
-            fn vc => L.seq [L.str "OR [",laytVCPred vc, L.str "]"])
-        | Not vc => L.seq [L.str "NOT [", laytVCPred vc, L.str "]"]
-        | If (vc1,vc2) => L.seq [laytVCPred vc1, L.str " => ", 
-              laytVCPred vc2]
-        | Iff (vc1,vc2) => L.seq [laytVCPred vc1, L.str " <=> ", 
-              laytVCPred vc2]
 
       fun layoutVC (T (tybinds,vcp1,vcp2)) = 
         Pretty.nest ("bindings",laytTyDBinds tybinds,
@@ -449,5 +450,142 @@ struct
 
   fun layouts (vcs,output) =
     (output $ L.str "Verification Conditions:\n" ; output $ layout vcs)
+    
+  (* ---- Hole filling ---- *)
+  structure  HoleMap: APPLICATIVE_MAP where
+    type Key.t = P.Hole.id and type Value.t = RP.t vector =
+  struct
+    structure Key = 
+    struct
+      type t = P.Hole.id
+      val equal = P.Hole.idEq
+      val layout = fn x => L.str $ P.Hole.idToString x
+    end
+    structure Value =
+    struct
+      type t = RP.t vector
+      val layout = Vector.layout (fn rp => L.str $ RP.toString rp) 
+    end
+    structure Map = ApplicativeMap (structure Key = Key
+                                   structure Value = Value)
+    open Map
+  end
+
+  structure HM = HoleMap
+
+  type typed_rel = RI.t * TyD.t 
+  type candidate_rels = {unions : typed_rel vector,
+                         crossprds : (typed_rel * typed_rel) vector}
+
+  fun synthRPreds rels (hole as P.Hole.T {substs,bv,id,env}) =
+    let
+      val rels = Vector.map (rels, 
+        fn (r,TyD.Tarrow (TyD.Trecord tupRec,_)) =>
+          let
+            val domTyD::sort= Vector.toList $ Record.range tupRec
+          in
+            (r,(domTyD,sort))
+          end)
+      val bvTyD = TyDBinds.find env bv
+      fun sortEq (t1,t2) = RelTy.equal (RelTy.Tuple $
+        Vector.fromList t1, RelTy.Tuple $ Vector.fromList t2)
+      val lhsRels = Vector.keepAll (rels, fn (_,(domTyD,_)) =>
+        TyD.sameType (domTyD,bvTyD))
+      exception CRRet of RI.t * candidate_rels
+      val crMap = Vector.map (lhsRels, fn (lhsRel, (_,lhsSort)) =>
+        let
+          val unions = Vector.keepAllMap (rels, 
+            fn (r, (tyd,rhsSort)) => if sortEq (lhsSort,rhsSort) 
+              then SOME (r,tyd) else NONE)
+          val _ = if not (List.length lhsSort = 2) 
+            then raise CRRet (lhsRel, {unions=unions, 
+                                       crossprds= Vector.new0 ()})
+            else ()
+          val [t1,t2] = lhsSort
+          val cp1 = Vector.keepAllMap (rels, fn (r,(tyd,rhsSort)) =>
+            if sortEq ([t1],rhsSort) then SOME (r,tyd) else NONE)
+          val cp2 = Vector.keepAllMap (rels, fn (r,(tyd,rhsSort)) =>
+            if sortEq ([t2],rhsSort) then SOME (r,tyd) else NONE)
+          val crossprds = vectorFoldrFoldr (cp1,cp2,[],
+            fn (el1,el2,acc) => (el1,el2)::acc)
+        in
+          (lhsRel, {unions = unions, 
+                    crossprds = Vector.fromList crossprds})
+        end handle CRRet x => x)
+        (*
+         * The straightforard grammar is:
+         *  v ::= x \in dom(env) and x \neq bv
+         *  R1 \in unions
+         *  R2 \in crossprds
+         *  expr ::= R1(v) | cp | expr U expr
+         *  cp ::= R2(v) X R2(v)
+         * We make it left-associative so that we only have one
+         * recursive call:
+         *  expr ::= R1(v) U expr | cp U expr | {}
+         *  cp ::= R2(v) X R2(v)
+         *)
+      val varbinds = TyDBinds.toVector $ TyDBinds.remove env bv
+      fun getVarsOfType tyd = Vector.keepAllMap (varbinds, 
+        fn (v,tyd') => if TyD.sameType (tyd,tyd') then SOME v else NONE) 
+      fun getValidAppExprs (r,tyd) = Vector.map (getVarsOfType tyd, 
+        fn v => RelLang.app (r,v))
+      fun getValidCPExprs ((r1,t1),(r2,t2)) =
+        let
+          val r1apps = getValidAppExprs (r1,t1)
+          val r2apps = getValidAppExprs (r2,t2)
+        in
+          Vector.fromList $ vectorFoldrFoldr (r1apps,r2apps,[], 
+            fn (r1app,r2app,acc) =>
+              (RelLang.crossprd (r1app,r2app)) :: acc)
+        end
+      fun synthRExpr {unions,crossprds} =
+        let
+          val appDisjuncts = Vector.concatV $ 
+            Vector.map (unions, getValidAppExprs)
+          val cpDisjuncts = Vector.concatV $
+            Vector.map (crossprds, getValidCPExprs)
+          val disjuncts = Vector.concat [appDisjuncts, cpDisjuncts]
+          val unionExpr = Vector.foldr (disjuncts, 
+            RelLang.emptyexpr (), fn (atom,expr) =>
+              RelLang.union (atom,expr))
+        in
+          unionExpr
+        end
+      fun synthRPred (lhsRel,cands) = RP.Eq (RelLang.app (lhsRel,bv),
+        synthRExpr cands)
+    in
+      Vector.map (crMap, synthRPred)
+    end
+
+  fun fillHolesInVC (T (tydbinds, anteP, conseqP)) hm = 
+    let
+      val rels = Vector.keepAllMap (tydbinds,
+        fn (v,tyd as TyD.Tarrow _) => SOME (RI.fromString $
+            Var.toString v, tyd)
+          | _ => NONE)
+      fun doItHole hole hm = 
+        let
+          val holeId = P.Hole.idOf hole
+        in
+          case HM.mem hm holeId of 
+              true => hm
+            | false => HM.add hm holeId (synthRPreds rels hole)
+        end
+      fun doIt vcp hm = case vcp of 
+          Simple (Hole h) => doItHole h hm
+        | Simple _ => hm
+        | If (vcp1,vcp2) => doIt vcp2 (doIt vcp1 hm)
+        | Iff (vcp1,vcp2) => doIt vcp2 (doIt vcp1 hm)
+        | Conj vcps => Vector.fold(vcps,hm, 
+          fn (vcp,hm') => doIt vcp hm')
+        | Disj vcps => Vector.fold(vcps,hm, 
+          fn (vcp,hm') => doIt vcp hm')
+        | Not vcp => doIt vcp hm
+    in
+      doIt conseqP (doIt anteP hm)
+    end
+
+  fun fillHoles vcs = Vector.fold (vcs, HM.empty, fn (vc,hm) =>
+    fillHolesInVC vc hm)
     
 end

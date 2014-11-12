@@ -6,6 +6,6 @@ relation Robs = Rob*;
 relation Roas = Roa*;
 
 concat : l1 -> l2 -> { l | ??};
-rev : l1 -> { l2 | Rmem(l2) = Rmem(l1) /\ Robs(l2) = Roas(l1)};
+rev : l1 -> { l2 | ??};
 
 snoc : x -> l -> {v | not (Rmem(v) = {()})};

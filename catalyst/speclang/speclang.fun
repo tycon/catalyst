@@ -283,8 +283,12 @@ struct
 
       fun idOf (T {id, ...}) = id
 
+      fun idToString id = id
+
       fun applySubst subst (T {substs,bv,id,env}) =
         make (subst::substs, bv, id, env)
+
+      fun idEq (id1:string, id2:string) = (id1 = id2)
     end
 
     datatype t =  True

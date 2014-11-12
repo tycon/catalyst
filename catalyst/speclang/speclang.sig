@@ -101,6 +101,8 @@ sig
       val new : unit -> t
       val make : (Var.t * Var.t) list * Var.t * id * TyDBinds.t -> t
       val idOf : t -> id
+      val idEq : id * id -> bool
+      val idToString : id -> string
       val applySubst : (Var.t * Var.t) -> t -> t
       val toString : t -> string
     end

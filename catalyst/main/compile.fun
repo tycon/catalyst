@@ -588,6 +588,9 @@ in
               }
             val _ = Control.saveToFile ({suffix = "evcs"}, No, elabvcs,
                                       Layouts VC.layouts)
+            val holeMap = VC.fillHoles elabvcs
+            val _ = Control.saveToFile ({suffix = "hm"}, No, holeMap,
+                                      Layout VC.HoleMap.layout)
             (*
             exception CantDischargeVC
             fun dischargeVC (i,vc) = case VCE.discharge vc of

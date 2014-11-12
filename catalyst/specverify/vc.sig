@@ -12,6 +12,10 @@ signature VERIFICATION_CONDITION =
 sig
   include VERIFICATION_CONDITION_STRUCTS
 
+  structure HoleMap: APPLICATIVE_MAP where
+    type Key.t = Predicate.Hole.id and 
+    type Value.t = Predicate.RelPredicate.t vector
+
   datatype simple_pred =  True
                        |  False
                        |  Hole of Predicate.Hole.t
@@ -34,6 +38,8 @@ sig
   val fromTypeCheck : VE.t * RefinementType.t * RefinementType.t -> t vector
 
   val elaborate : RE.t * t -> t
+
+  val fillHoles: t vector -> HoleMap.t 
 
   val layout : t vector -> Layout.t
 
