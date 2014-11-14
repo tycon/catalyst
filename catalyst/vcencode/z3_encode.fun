@@ -8,6 +8,7 @@ struct
                 | Bool of z3_sort
                 | T of string * z3_sort
   datatype ast = AST of z3_ast * sort
+  datatype satisfiability = SAT | UNSAT | UNKNOWN
   (*
    * Set Invariant : len(ty) = len(domain(pred)) 
    * Null constructor is motivated by two reasons:
@@ -25,6 +26,7 @@ struct
   datatype struc_rel = SR of {rel : ast -> set}
   type assertion = z3_ast
   type context = z3_context
+  type model = z3_model
   val log = z3_log
 
   fun $ (f,arg) = f arg
@@ -49,6 +51,7 @@ struct
     let
       val cfg = Z3_mk_config ()
       val _   = Z3_global_param_set ("smt.macro-finder","true")
+      val _   = Z3_global_param_set ("model.partial","false")
       val ctx = Z3_mk_context cfg
       val _   = Z3_del_config cfg
     in
@@ -59,9 +62,26 @@ struct
     let
       val _ = log "(check-sat)"
       val _ = log "\n\n"
+      val res = Z3_check ctx
     in
-      Z3_check ctx
+      case res of 1 => SAT | 0 => UNKNOWN | ~1 => UNSAT
+        | _ => Error.bug "Integer received when Z3_lbool expected"
     end 
+
+  fun checkContextGetModel ctx = 
+    let
+      val _ = log "(check-sat)\n"
+      val _ = log "(get-model)"
+      val _ = log "\n\n"
+      val modelPtr = ref $ dummyModel ()
+      val res = Z3_check_and_get_model (ctx,modelPtr)
+      val satisfiability = case res of 1 => SAT 
+        | 0 => UNKNOWN | ~1 => UNSAT
+        | _ => Error.bug "Integer received when Z3_lbool expected"
+    in
+      (satisfiability, !modelPtr)
+    end 
+
   val delContext = Z3_del_context
 
   (*
@@ -320,7 +340,7 @@ struct
             in
               (pats,implies)
             end)
-       
+
       val mkUnion = fn (Null,s2) => s2 | (s1,Null) => s1 
         | (Set {ty=sorts1,pred=pred1}, Set {ty=sorts2,pred=pred2}) =>
           let
@@ -397,11 +417,57 @@ struct
 
       fun mkOr asrv = Z3_mk_or (ctx, Vector.length asrv, asrv) 
 
+      fun astToAssertion (ast as AST (z3_ast,_))= 
+        let
+          val _ = assert (typeCheckAst (ast, Bool bool_sort),
+            "Only bool asts can be converted to assertion\n")
+        in
+          z3_ast
+        end
 
       fun mkConstEqAssertion (ast1 as AST (x1,s1), AST (x2,s2)) = 
         (typeCheckAst (ast1,s2); Z3_mk_eq (ctx,x1,x2))
 
       fun mkInt i = AST (Z3_mk_int (ctx, i, int_sort), Int int_sort)
+
+      val mkSelectableSet = fn (_,Null) => Null 
+        | (ast,set as Set {ty,pred}) =>
+          let
+            val sset = mkSet (genSetName (), ty)
+            val grd = astToZ3Ast ast
+            val ifAss = mkIf (grd, mkSetEqAssertion (sset,set))
+            val elseAss = mkIf (mkNot grd, mkSetEqAssertion (sset,Null))
+            val _ = dischargeAssertion ifAss
+            val _ = dischargeAssertion elseAss
+          in
+            sset
+          end
+
+      fun doPush () = (log "(push)\n"; Z3_push ctx)
+      fun doPop () = (log "(pop)\n"; Z3_pop (ctx,1))
+
+      fun getValueOf model ast = 
+        let
+          val _ = assert(typeCheckAst (ast,Bool bool_sort),
+            "getValue only works for boolean constants\n")
+          val z3_ast = astToZ3Ast ast
+          val val_ast_ptr = ref truee
+          val res = Z3_eval (ctx,model,z3_ast,val_ast_ptr)
+          val _ = case res of 1 => ()
+            | 0 => Error.bug ("Z3_eval error\n")
+          val val_ast = ! val_ast_ptr
+          (*
+          val _ = print ("Value of "^(astToString ast)^": ")
+          val _ = print $ Z3_ast_to_string (ctx,val_ast)
+          val _ = print "\n"
+          *)
+        in
+          case Z3_is_eq_ast (ctx,val_ast,truee) of 1 => true
+            | 0 => false
+        end
+
+      fun modelToString model = Z3_model_to_string (ctx,model)
+       
     in
       {
         bool_sort = Bool bool_sort,
@@ -420,6 +486,7 @@ struct
         mkStrucRelApp = mkStrucRelApp,
         mkNullSet = mkNullSet,
         mkSingletonSet = mkSingletonSet,
+        mkSelectableSet = mkSelectableSet,
         mkUnion = mkUnion,
         mkCrossPrd = mkCrossPrd,
         mkDiff = mkDiff,
@@ -431,7 +498,12 @@ struct
         mkIff = mkIff,
         mkAnd = mkAnd,
         mkOr = mkOr,
-        dischargeAssertion = dischargeAssertion
+        astToAssertion = astToAssertion,
+        dischargeAssertion = dischargeAssertion,
+        doPush = doPush,
+        doPop = doPop,
+        getValueOf = getValueOf,
+        modelToString = modelToString
        }
     end
 end

@@ -37,7 +37,9 @@ sig
   
   val fromTypeCheck : VE.t * RefinementType.t * RefinementType.t -> t vector
 
-  val elaborate : RE.t * t -> t
+  (* val elaborate : RE.t * t -> t *)
+
+  val elaborateAll : RE.t * t vector -> t vector
 
   val fillHoles: t vector -> HoleMap.t 
 

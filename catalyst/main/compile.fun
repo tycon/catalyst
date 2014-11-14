@@ -123,7 +123,6 @@ structure SpecVerify = SpecVerify (structure VE = VE
 
 structure VC = SpecVerify.VC
 
-(*
 val (z3_log,z3_log_close) = (fn stream => 
   (fn str => (Out.output (stream,str);
       Out.flush stream), 
@@ -132,7 +131,6 @@ val (z3_log,z3_log_close) = (fn stream =>
 
 structure VCE = VCEncode (structure VC = VC
                           val z3_log = z3_log)
-*)
 
 (* ------------------------------------------------- *)
 (*                 Lookup Constant                   *)
@@ -583,14 +581,18 @@ in
                 stats = fn _ => Layout.empty,
                 style = Control.ML,
                 suffix = "elabvcs",
-                thunk = (fn () =>Vector.map (vcs, fn vc =>
-                    VC.elaborate (re,vc)))
+                thunk = (fn () => VC.elaborateAll (re,vcs))
               }
             val _ = Control.saveToFile ({suffix = "evcs"}, No, elabvcs,
                                       Layouts VC.layouts)
             val holeMap = VC.fillHoles elabvcs
             val _ = Control.saveToFile ({suffix = "hm"}, No, holeMap,
                                       Layout VC.HoleMap.layout)
+            val _ = VCE.setCegisBound (!cegisBound)
+            val solHM = VCE.solve (elabvcs,holeMap)
+            val _ = Control.saveToFile ({suffix = "sol"}, No, solHM,
+                                      Layout VC.HoleMap.layout)
+
             (*
             exception CantDischargeVC
             fun dischargeVC (i,vc) = case VCE.discharge vc of

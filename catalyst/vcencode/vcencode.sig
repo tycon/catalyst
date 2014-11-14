@@ -7,5 +7,7 @@ signature VC_ENCODE =
 sig
   include VC_ENCODE_STRUCTS
   datatype result = Success | Undef | Failure
-  val discharge : VC.t -> result
+  (* val discharge : VC.t -> result *)
+  val setCegisBound : int -> unit
+  val solve : VC.t vector * VC.HoleMap.t -> VC.HoleMap.t
 end

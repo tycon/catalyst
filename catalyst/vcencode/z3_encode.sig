@@ -12,6 +12,8 @@ sig
   type ast
   type struc_rel
   type assertion
+  type model
+  datatype satisfiability = SAT | UNSAT | UNKNOWN
   exception InvalidOperation
   val mkDefaultContext : unit -> context
   val generateAPI : context -> 
@@ -32,6 +34,7 @@ sig
       mkStrucRelApp : struc_rel * ast -> set,
       mkNullSet : unit -> set,
       mkSingletonSet : ast vector -> set,
+      mkSelectableSet : ast * set -> set,
       mkUnion :  (set * set) -> set,
       mkCrossPrd :  (set * set) -> set ,
       mkDiff :  (set * set) -> set ,
@@ -43,8 +46,14 @@ sig
       mkIff : assertion * assertion -> assertion,
       mkAnd : assertion vector -> assertion,
       mkOr : assertion vector -> assertion,
-      dischargeAssertion :  assertion -> unit
+      astToAssertion : ast (*:bool*) -> assertion,
+      dischargeAssertion :  assertion -> unit,
+      doPush : unit -> unit,
+      doPop : unit -> unit,
+      getValueOf : model -> ast -> bool,
+      modelToString : model -> string
     }
-  val checkContext : context -> int
+  val checkContext : context -> satisfiability
+  val checkContextGetModel : context -> (satisfiability * model)
   val delContext : context -> unit
 end

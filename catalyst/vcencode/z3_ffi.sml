@@ -31,6 +31,8 @@ struct
   type z3_literals = MLton.Pointer.t
   type z3_tactic = MLton.Pointer.t
 
+  val dummyModel = fn () => MLton.Pointer.null 
+
   val hndl = DynLink.dlopen 
       ("libz3.dylib", DynLink.RTLD_LAZY);
 
@@ -1789,7 +1791,8 @@ struct
 
   fun Z3_check_and_get_model (c,m) = 
   let
-    val dyn_Z3_check_and_get_model = _import * : DynLink.fptr -> (z3_context * MLton.Pointer.t) -> int;
+    val dyn_Z3_check_and_get_model = _import * : DynLink.fptr ->
+    (z3_context * z3_model ref) -> int;
     val Z3_check_and_get_model_ptr = DynLink.dlsym(hndl, "Z3_check_and_get_model")
   in
     dyn_Z3_check_and_get_model Z3_check_and_get_model_ptr (c,m)
@@ -4070,7 +4073,8 @@ struct
 
   fun Z3_eval (c,m,t,v) = 
   let
-    val dyn_Z3_eval = _import * : DynLink.fptr -> (z3_context * z3_model * z3_ast * MLton.Pointer.t) -> int;
+    val dyn_Z3_eval = _import * : DynLink.fptr -> (z3_context *
+    z3_model * z3_ast * z3_ast ref) -> int;
     val Z3_eval_ptr = DynLink.dlsym(hndl, "Z3_eval")
   in
     dyn_Z3_eval Z3_eval_ptr (c,m,t,v)

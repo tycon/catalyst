@@ -187,6 +187,9 @@ signature CONTROL_FLAGS =
 
       (* The specificaiton file from -spec arg.*)
       val specFile : File.t option ref
+
+      (* CEGIS bound *)
+      val cegisBound : int ref
          
       (* Whether or not the elaborator keeps def-use information. *)
       val keepDefUse: bool ref

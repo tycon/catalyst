@@ -123,7 +123,13 @@ struct
       | Star r => (RelId.toString r) ^ "*"
 
     fun app (relId,var) = R(relId,var)
-    fun union (e1,e2) = U (e1,e2)
+
+    fun union (e1 as T elemvec,e2) = 
+        if Vector.length elemvec = 0 then e2 else U (e1,e2) 
+      | union (e1, e2 as T elemvec) = 
+        if Vector.length elemvec = 0 then e1 else U (e1,e2) 
+      | union (e1,e2) = U (e1,e2)
+
     fun crossprd (e1,e2) = X (e1,e2)
     fun diff (e1,e2) = D (e1,e2)
     fun emptyexpr _ = T (Vector.fromList [])

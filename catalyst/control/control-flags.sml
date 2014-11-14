@@ -747,6 +747,10 @@ val specFile = control {name = "spec file",
                             SOME s => File.toString s 
                           | NONE => "no spec file")}
 
+val cegisBound = control {name = "cegisBound bound",
+                          default = 10,
+                          toString = Int.toString}
+
 val keepCoreML = control {name = "keep CoreML",
                           default = false,
                           toString = Bool.toString}

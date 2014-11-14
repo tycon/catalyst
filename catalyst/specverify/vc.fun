@@ -303,7 +303,7 @@ struct
     open Map
   end
 
-  fun elaborate (re,vc) =
+  fun elaborate re (vc,rinstTab) =
     let
       val T (tydbinds,anteP,conseqP) = vc
 
@@ -391,7 +391,7 @@ struct
         | If vcps => mapSnd If $ mapFoldTuple rinstTab elabVCPred vcps
         | Iff vcps => mapSnd Iff $ mapFoldTuple rinstTab elabVCPred vcps
 
-      val (rinstTab,anteP') = elabVCPred RelInstTable.empty anteP
+      val (rinstTab,anteP') = elabVCPred rinstTab anteP
       val (rinstTab,conseqP') = elabVCPred rinstTab conseqP
 
       val newtydbinds = Vector.map (RelInstTable.toVector rinstTab,
@@ -410,8 +410,11 @@ struct
 
       val tydbinds' = Vector.concat [tydbinds,newtydbinds]
     in
-      T (tydbinds',anteP',conseqP')
+      (T (tydbinds',anteP',conseqP'), rinstTab)
     end
+
+    fun elaborateAll (re,vcs) = #1 $ Vector.mapAndFold (vcs,
+      RelInstTable.empty, (elaborate re))
 
     fun laytSimplePred sp = case sp of 
         True => L.str "true"
@@ -489,8 +492,10 @@ struct
       val bvTyD = TyDBinds.find env bv
       fun sortEq (t1,t2) = RelTy.equal (RelTy.Tuple $
         Vector.fromList t1, RelTy.Tuple $ Vector.fromList t2)
-      val lhsRels = Vector.keepAll (rels, fn (_,(domTyD,_)) =>
-        TyD.sameType (domTyD,bvTyD))
+      fun notRhd rel = not (String.hasPrefix(RI.toString rel,
+        {prefix="Rhd"}))
+      val lhsRels = Vector.keepAll (rels, fn (rel,(domTyD,_)) =>
+        TyD.sameType (domTyD,bvTyD) andalso (notRhd rel))
       exception CRRet of RI.t * candidate_rels
       val crMap = Vector.map (lhsRels, fn (lhsRel, (_,lhsSort)) =>
         let

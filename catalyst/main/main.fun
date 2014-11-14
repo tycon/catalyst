@@ -67,6 +67,9 @@ fun makeOptions {usage} =
                       | _ => usage (concat ["invalid -keep flag: ", s]))),
        (Normal, "spec", " <file>", "specification file name",
         SpaceString (fn s => specFile := SOME s)),
+       (Normal, "cegisBound", " <int>", "bound on cegis iterations",
+        SpaceString (fn s => case Int.fromString s of NONE => ()
+          | SOME i => cegisBound := i)),
        (Expert, "keep-elab-env", " {true|false}", "keep elaborated env",
         boolRef keepElaboratedEnv),
        (Expert, "keep-pass", " <pass>", "keep the results of pass",

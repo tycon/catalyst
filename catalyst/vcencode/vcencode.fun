@@ -2,8 +2,11 @@ functor VCEncode (S : VC_ENCODE_STRUCTS) : VC_ENCODE =
 struct
   open S
   open VC
+  structure HM = HoleMap
   structure TyD = TypeDesc
   structure RI = RelLang.RelId
+  structure P = Predicate
+  structure Hole = P.Hole
   structure BP = Predicate.BasePredicate
   structure RP = Predicate.RelPredicate
   structure L = Layout
@@ -37,8 +40,49 @@ struct
   infixr 5 $
   val assert = Control.assert
   val ignore = fn _ => ()
+  val log = z3_log
+
+  val symbase = "!a"
+
+  val count = ref 0
+ 
+  val cegisBound = ref 10
+
+  fun setCegisBound i = cegisBound := i
+
+  val genSelector = fn _ => 
+    let val id = symbase ^ (Int.toString (!count))
+        val _ = count := !count + 1
+    in
+      Var.fromString id 
+    end
+  val varStrEq = fn (v1,v2) => Var.toString v1 = 
+    Var.toString v2
+
+  datatype hole_rp = RPEq of {lhs: RelLang.expr,
+                                rhs: (Var.t * RelLang.expr) vector}
+
+  fun toHoleRP (RP.Eq (lhsExpr, rhsExpr)) =
+    let
+      fun foldUnion (RelLang.U (e1,e2)) = Vector.concat 
+        [foldUnion e1, foldUnion e2]
+        | foldUnion e = Vector.new1 e
+      val rhsExprs = foldUnion rhsExpr
+      val (selectors,rhs) = Vector.unzip $ Vector.map (rhsExprs,
+        fn e => (fn v => (v, (v,e))) (genSelector()))
+    in
+      (RPEq {lhs = lhsExpr, rhs=rhs}, selectors)
+    end
+
+  fun fromHoleRP (RPEq {lhs, rhs}) =
+    let
+      val rhsExpr = Vector.fold (Vector.map (rhs,#2),
+        RelLang.emptyexpr (), RelLang.union)
+    in
+      RP.Eq (lhs,rhsExpr)
+    end
   
-  fun discharge (VC.T (tydbinds,anteP,conseqP)) =
+  fun discharge (VC.T (tydbinds,anteP,conseqP), (holeRPs, sels)) =
     let
       val ctx = Z3_Encode.mkDefaultContext ()
       (*
@@ -58,6 +102,7 @@ struct
       val mkStrucRelApp = #mkStrucRelApp api
       val mkNullSet = #mkNullSet api
       val mkSingletonSet = #mkSingletonSet api
+      val mkSelectableSet = #mkSelectableSet api
       val mkUnion = #mkUnion api
       val mkCrossPrd = #mkCrossPrd api
       val mkDiff = #mkDiff api
@@ -69,7 +114,12 @@ struct
       val mkIff = #mkIff api
       val mkAnd = #mkAnd api
       val mkOr = #mkOr api
+      val doPush = #doPush api
+      val doPop = #doPop api
+      val modelToString = #modelToString api
       val dischargeAssertion = #dischargeAssertion api
+      val getValueOf = #getValueOf api
+      val astToAssertion = #astToAssertion api
       (*
        * Maps to keep track of encoded values
        *)
@@ -93,6 +143,11 @@ struct
       fun getStrucRelForRelId rid = (fn rstr => HashTable.lookup relMap
         rstr handle RelNotFound => Error.bug ("Rel "^rstr^" undec\
           \lared despite processing tydbinds")) (RI.toString rid)
+      (*
+       * Add selectors to tydbinds
+       *)
+      val selBinds = Vector.map (sels, fn sel => (sel,boolTyD))
+      val tydbinds = Vector.concat [tydbinds, selBinds]
       (*
        * Encoding functions
        * encodeConst and encodeStrucRel rely on uniqueness of 
@@ -154,25 +209,30 @@ struct
                 encodeBasePred bp2)
         end
 
+      local
+        open RelLang
+      in
+        val encodeRelElem = fn (Int i) => mkInt i 
+          | Bool true => const_true | Bool false => const_false
+          | Var v => getConstForVar v
+
+        fun encodeRelExpr (e:expr) : Z3_Encode.set =
+          case e of T els => (case Vector.length els of
+              0 => mkNullSet ()
+            | _ => mkSingletonSet $ Vector.map (els,
+                encodeRelElem))
+          | X (e1,e2) => mkCrossPrd (encodeRelExpr e1, 
+              encodeRelExpr e2)
+          | U (e1,e2) => mkUnion (encodeRelExpr e1, 
+              encodeRelExpr e2)
+          | D (e1,e2) => mkDiff (encodeRelExpr e1, 
+              encodeRelExpr e2)
+          | R (rid,v) => mkStrucRelApp (getStrucRelForRelId rid,
+              getConstForVar v)
+      end
+
       fun encodeRelPred (rp:RP.t) : Z3_Encode.assertion =
         let
-          open RelLang
-          val encodeRelElem = fn (Int i) => mkInt i 
-            | Bool true => const_true | Bool false => const_false
-            | Var v => getConstForVar v
-          fun encodeRelExpr (e:expr) : Z3_Encode.set =
-            case e of T els => (case Vector.length els of
-                0 => mkNullSet ()
-              | _ => mkSingletonSet $ Vector.map (els,
-                  encodeRelElem))
-            | X (e1,e2) => mkCrossPrd (encodeRelExpr e1, 
-                encodeRelExpr e2)
-            | U (e1,e2) => mkUnion (encodeRelExpr e1, 
-                encodeRelExpr e2)
-            | D (e1,e2) => mkDiff (encodeRelExpr e1, 
-                encodeRelExpr e2)
-            | R (rid,v) => mkStrucRelApp (getStrucRelForRelId rid,
-                getConstForVar v)
           val f = encodeRelExpr
           open RP
         in
@@ -182,10 +242,39 @@ struct
               mkSubSetAssertion s)) (f e1, f e2)
         end
 
+      fun encodeHoleRP (RPEq {lhs,rhs}) = 
+        let
+          val lhsSet = encodeRelExpr lhs
+          val rhsAsts = Vector.map (rhs, fn (sel,re) =>
+            let
+              val selAst = getConstForVar sel
+              val s = encodeRelExpr re
+            in
+              mkSelectableSet (selAst,s)
+            end)
+          val rhsSet = Vector.fold (rhsAsts, mkNullSet (), 
+            fn (rhsAst, rhs) => mkUnion (rhsAst,rhs))
+        in
+          mkSetEqAssertion (lhsSet,rhsSet)
+        end
+
       fun encodeSimplePred (sp : VC.simple_pred) : Z3_Encode.assertion =
         case sp of 
           (Base bp) => encodeBasePred bp
         | (Rel rp) => encodeRelPred rp
+        | (Hole h) => 
+          let
+            val Hole.T {substs, ...} = h
+            val doSubst = fn re => RelLang.applySubsts 
+              (Vector.fromList substs) re
+            val thisHoleRPs = Vector.map (holeRPs, 
+              fn (RPEq {lhs,rhs}) => RPEq {
+                lhs = doSubst lhs, 
+                rhs = Vector.map (rhs, fn (sel,re) => (sel, doSubst re))})
+            val holeAssn = mkAnd $ Vector.map (thisHoleRPs, encodeHoleRP)
+          in
+            holeAssn
+          end
 
       val assertSimplePred  = dischargeAssertion o encodeSimplePred
 
@@ -201,19 +290,113 @@ struct
 
       fun assertVCPred vcp = case vcp of 
           VC.Simple sp => assertSimplePred sp
+
         | VC.Conj spv => Vector.foreach (spv,assertVCPred)
         | _ => dischargeAssertion $ encodeVCPred vcp
-     
+    
       val _ = Vector.foreach (tydbinds, processTyDBind)
       val _ = assertVCPred anteP
-      (*
-       * We check the SAT of ¬conseqP
-       *)
-      val _ = dischargeAssertion $ mkNot $ encodeVCPred conseqP
-      val res = Z3_Encode.checkContext ctx
+      exception CegisSuccess of (Var.t * bool) vector
+      fun cegisLoop (iter,invalidSels : Z3_Encode.assertion list) =
+        let
+          val _ = assert (iter < !cegisBound, "CEGIS did not converge in "
+            ^(Int.toString $ !cegisBound)^" iterations. Terminating.\n")
+          val _ = print $ "------ CEGIS Iteration " 
+            ^(Int.toString iter)^" ------\n"
+          (*
+           * Generate a candidate solution
+           *)
+          val _ = doPush ()
+          (*
+           * First rule out those solutions that are known to be
+           * incorrect
+           *)
+          val _ = List.foreach (invalidSels, fn invalidSel =>
+            dischargeAssertion $ mkNot invalidSel)
+          (*
+           * Check SAT of conseqP
+           *)
+          val _ = dischargeAssertion $ encodeVCPred conseqP
+          val (res,model) = Z3_Encode.checkContextGetModel ctx
+          val _ = doPop ()
+          val _ = case res of Z3_Encode.SAT => ()
+            | _ => raise (Fail "Unable to synthesize type\n")
+          (*val modelStr = modelToString model
+          val _ = log modelStr
+          val _ = log "\n\n" *)
+          val (coreModel, selAsts) = Vector.unzip $ Vector.map (sels, 
+            fn sv => 
+              let
+                val ast = getConstForVar sv
+                val assn = astToAssertion ast
+                val boolval = getValueOf model ast
+                val _ = print $ (Var.toString sv)^" : "^(Bool.toString
+                  boolval) ^"\n"
+                val assnAst = if boolval then  assn else mkNot assn
+              in
+                ((sv,boolval), assnAst)
+              end)
+          val selection = mkAnd selAsts
+          val _ = doPush ()
+          (*
+           * To check the validity of candidate solution, we check 
+           * SAT of ¬conseqP
+           *)
+          val _ = dischargeAssertion selection
+          val _ = dischargeAssertion $ mkNot $ encodeVCPred conseqP
+          val res = Z3_Encode.checkContext ctx
+          val _ = doPop ()
+          val _ = case res of Z3_Encode.SAT => ()
+            | Z3_Encode.UNSAT => raise (CegisSuccess coreModel)
+            | Z3_Encode.UNKNOWN => Error.bug "Z3 timeout while deciding validity"
+          val modelStr = modelToString model
+          (*
+          val _ = log "CounterExample:\n"
+          val _ = log modelStr
+          val _ = log "\n\n"
+          *)
+        in
+          cegisLoop (iter+1, selection :: invalidSels)
+        end handle CegisSuccess soln => soln
+      val soln = cegisLoop (0,[])
       val _ = Z3_Encode.delContext ctx
+      val newSels = Vector.keepAllMap (soln, 
+        fn (sv,true) => SOME sv | _ => NONE)
+      val newHoleRPs = Vector.map (holeRPs, 
+        fn (RPEq {lhs,rhs}) => 
+          let
+            val rhs' = Vector.keepAll (rhs, 
+              fn (sv,_) => Vector.exists (newSels,
+                fn (sel) => varStrEq (sel,sv)))
+          in
+            RPEq {lhs=lhs, rhs=rhs'}
+          end)
     in
-      case res of ~1 => Success | 0 => Undef | 1 => Failure
-        | _ => Error.bug "Integer received when Z3_lbool expected"
+      (newHoleRPs,newSels)
     end
+
+    fun solve (vcs,hm) = 
+      let
+        (* only one hole for now *)
+        val [(holeId,rps)] = Vector.toList $ HM.toVector hm
+        val _ = Vector.foreach (vcs, fn (VC.T (_,anteP,conseqP)) =>
+          case conseqP of Simple (Hole h) => 
+            assert (P.Hole.idEq (P.Hole.idOf h, holeId), 
+              "More than 1 hole Unimpl.")
+          | _ => ())
+        (* 
+         * First, get selectors for the hole
+         *)
+        val (holeRPs, sels) = Vector.mapAndFold (rps, 
+          Vector.new0 (), fn (rp,sels) => 
+            let 
+              val (holeRP,newSels) = toHoleRP rp 
+            in
+              (holeRP, Vector.concat [newSels,sels])
+            end)
+        val holeRPs' = Vector.foldr (vcs, (holeRPs, sels), discharge )
+        val rps = Vector.map (holeRPs, fromHoleRP)
+      in
+        HM.add hm holeId rps
+      end
 end
