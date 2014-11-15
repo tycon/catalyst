@@ -1,0 +1,42 @@
+??0 :-> 
+(
+  Rmem2(l) = (Rhd3(l2) U (Rhd3(l1) U (Rmem2(l2) U Rmem2(l1)))),
+  Rob3(l) = (Rob3(l2) U (Rob3(l1) U (Robs2(l2) U (Robs2(l1) U 
+            ((Rhd3(l2) X Rhd3(l2)) U ((Rhd3(l2) X Rhd3(l1)) U 
+            ((Rhd3(l1) X Rhd3(l2)) U ((Rhd3(l1) X Rhd3(l1)) U 
+            ((Rhd3(l2) X Rmem2(l2)) U ((Rhd3(l2) X Rmem2(l1)) U 
+            ((Rhd3(l1) X Rmem2(l2)) U ((Rhd3(l1) X Rmem2(l1)) U 
+            ((Rmem2(l2) X Rhd3(l2)) U ((Rmem2(l2) X Rhd3(l1)) U 
+            ((Rmem2(l1) X Rhd3(l2)) U ((Rmem2(l1) X Rhd3(l1)) U 
+            ((Rmem2(l2) X Rmem2(l2)) U ((Rmem2(l2) X Rmem2(l1)) U 
+            ((Rmem2(l1) X Rmem2(l2)) U (Rmem2(l1) X Rmem2(l1))))))))))))))))))))),
+  Robs2(l) = (Rob3(l2) U (Rob3(l1) U (Robs2(l2) U (Robs2(l1) U 
+             ((Rhd3(l2) X Rhd3(l2)) U ((Rhd3(l2) X Rhd3(l1)) U 
+             ((Rhd3(l1) X Rhd3(l2)) U ((Rhd3(l1) X Rhd3(l1)) U 
+             ((Rhd3(l2) X Rmem2(l2)) U ((Rhd3(l2) X Rmem2(l1)) U 
+             ((Rhd3(l1) X Rmem2(l2)) U ((Rhd3(l1) X Rmem2(l1)) U 
+             ((Rmem2(l2) X Rhd3(l2)) U ((Rmem2(l2) X Rhd3(l1)) U 
+             ((Rmem2(l1) X Rhd3(l2)) U ((Rmem2(l1) X Rhd3(l1)) U 
+             ((Rmem2(l2) X Rmem2(l2)) U ((Rmem2(l2) X Rmem2(l1)) U 
+             ((Rmem2(l1) X Rmem2(l2)) U (Rmem2(l1) X Rmem2(l1))))))))))))))))))))))
+  Roa1(l) = (Rob3(l2) U (Rob3(l1) U (Robs2(l2) U (Robs2(l1) U 
+            (Roa1(l2) U (Roa1(l1) U (Roas0(l2) U (Roas0(l1) U 
+            ((Rhd5(l2) X Rhd5(l2)) U ((Rhd5(l2) X Rhd5(l1)) U 
+            ((Rhd5(l1) X Rhd5(l2)) U ((Rhd5(l1) X Rhd5(l1)) U 
+            ((Rhd5(l2) X Rmem4(l2)) U ((Rhd5(l2) X Rmem4(l1)) U 
+            ((Rhd5(l1) X Rmem4(l2)) U ((Rhd5(l1) X Rmem4(l1)) U 
+            ((Rmem4(l2) X Rhd5(l2)) U ((Rmem4(l2) X Rhd5(l1)) U 
+            ((Rmem4(l1) X Rhd5(l2)) U ((Rmem4(l1) X Rhd5(l1)) U 
+            ((Rmem4(l2) X Rmem4(l2)) U ((Rmem4(l2) X Rmem4(l1)) U 
+            ((Rmem4(l1) X Rmem4(l2)) U (Rmem4(l1) X Rmem4(l1))))))))))))))))))))))))),
+  Roas0(l) = (Rob3(l2) U (Rob3(l1) U (Robs2(l2) U (Robs2(l1) U 
+             (Roa1(l2) U (Roa1(l1) U (Roas0(l2) U (Roas0(l1) U 
+             ((Rhd5(l2) X Rhd5(l2)) U ((Rhd5(l2) X Rhd5(l1)) U 
+             ((Rhd5(l1) X Rhd5(l2)) U ((Rhd5(l1) X Rhd5(l1)) U 
+             ((Rhd5(l2) X Rmem4(l2)) U ((Rhd5(l2) X Rmem4(l1)) U 
+             ((Rhd5(l1) X Rmem4(l2)) U ((Rhd5(l1) X Rmem4(l1)) U 
+             ((Rmem4(l2) X Rhd5(l2)) U ((Rmem4(l2) X Rhd5(l1)) U 
+             ((Rmem4(l1) X Rhd5(l2)) U ((Rmem4(l1) X Rhd5(l1)) U 
+             ((Rmem4(l2) X Rmem4(l2)) U ((Rmem4(l2) X Rmem4(l1)) U 
+             ((Rmem4(l1) X Rmem4(l2)) U (Rmem4(l1) X Rmem4(l1)))))))))))))))))))))))))
+)

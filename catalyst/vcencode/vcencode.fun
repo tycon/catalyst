@@ -58,6 +58,8 @@ struct
     end
   val varStrEq = fn (v1,v2) => Var.toString v1 = 
     Var.toString v2
+  val intTyD = TyD.makeTconstr (Tycon.intInf,[])
+  val boolTyD = TyD.makeTconstr (Tycon.bool,[])
 
   datatype hole_rp = RPEq of {lhs: RelLang.expr,
                                 rhs: (Var.t * RelLang.expr) vector}
@@ -126,8 +128,6 @@ struct
       fun strEq (str1,str2) = (str1 = str2)
       val tyMap = HashTable.mkTable (MLton.hash, TyD.sameType) 
         (117, TyDNotFound)
-      val intTyD = TyD.makeTconstr (Tycon.intInf,[])
-      val boolTyD = TyD.makeTconstr (Tycon.bool,[])
       val _ = HashTable.insert tyMap (intTyD,int_sort)
       val _ = HashTable.insert tyMap (boolTyD,bool_sort)
       fun addTyD tyd = (fn sort => 
@@ -394,9 +394,25 @@ struct
             in
               (holeRP, Vector.concat [newSels,sels])
             end)
-        val holeRPs' = Vector.foldr (vcs, (holeRPs, sels), discharge )
-        val rps = Vector.map (holeRPs, fromHoleRP)
+        (* Only two VCs for now *)
+        val [VC.T (tydbinds1,anteP1,conseqP1),
+             VC.T (tydbinds2,anteP2,conseqP2)] = Vector.toList vcs
+        val len = Vector.length
+        val isVC0 = Var.fromString "vc!0"
+        val anteP =  Conj $ Vector.fromList $ 
+          [
+            If (Simple $ Base $ BP.Eq (BP.Var isVC0, BP.Bool true),
+                anteP1),
+            If (Simple $ Base $ BP.Eq (BP.Var isVC0, BP.Bool false),
+                anteP2)
+          ]
+        val (tydbinds,conseqP) = case (len tydbinds1 < len tydbinds2) of
+          true => (tydbinds2,conseqP2) | false => (tydbinds1,conseqP1)
+        val theVC = VC.T (Vector.concat [tydbinds, 
+          Vector.new1 (isVC0,boolTyD)], anteP, conseqP)
+        val (holeRPs',_) = discharge (theVC,(holeRPs, sels))
+        val rps = Vector.map (holeRPs', fromHoleRP)
       in
-        HM.add hm holeId rps
+        HM.add (HM.empty) holeId rps
       end
 end
