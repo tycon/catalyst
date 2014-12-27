@@ -64,6 +64,11 @@ struct
   datatype hole_rp = RPEq of {lhs: RelLang.expr,
                                 rhs: (Var.t * RelLang.expr) vector}
 
+  (*
+   * Takes e = (e1 U (e2 U e3)) U e4 and returns its holeRP version:
+   * e = SEL(a1,e1) U SEL(a2,e2) U SEL(a3,e3) U SEL(a4,e4), along with
+   * the vector of selectors : [a1,a2,a3,a4]
+   *)
   fun toHoleRP (RP.Eq (lhsExpr, rhsExpr)) =
     let
       fun foldUnion (RelLang.U (e1,e2)) = Vector.concat 
@@ -84,7 +89,12 @@ struct
       RP.Eq (lhs,rhsExpr)
     end
   
-  fun discharge (VC.T (tydbinds,anteP,conseqP), (holeRPs, sels)) =
+  (*
+   * Given a VC with one hole, a weaker solution to the hole, and a
+   * state space of candidate solutions, selects a candidate solution
+   * that can be used to strengthen the weaker solution.
+   *)
+  fun discharge (VC.T (tydbinds,anteP,conseqP)) knownRPs (holeRP, sels) =
     let
       val ctx = Z3_Encode.mkDefaultContext ()
       (*
@@ -258,6 +268,11 @@ struct
           mkSetEqAssertion (lhsSet,rhsSet)
         end
 
+      (*
+       * Encode RPreds that are known conjuncts of the solution
+       *)
+      val knownAssns = List.map (knownRPs, encodeRelPred)
+
       fun encodeSimplePred (sp : VC.simple_pred) : Z3_Encode.assertion =
         case sp of 
           (Base bp) => encodeBasePred bp
@@ -265,13 +280,14 @@ struct
         | (Hole h) => 
           let
             val Hole.T {substs, ...} = h
+            val RPEq {lhs,rhs} = holeRP
             val doSubst = fn re => RelLang.applySubsts 
               (Vector.fromList substs) re
-            val thisHoleRPs = Vector.map (holeRPs, 
-              fn (RPEq {lhs,rhs}) => RPEq {
-                lhs = doSubst lhs, 
-                rhs = Vector.map (rhs, fn (sel,re) => (sel, doSubst re))})
-            val holeAssn = mkAnd $ Vector.map (thisHoleRPs, encodeHoleRP)
+            val thisHoleRP =  RPEq {lhs = doSubst lhs, 
+                rhs = Vector.map (rhs, fn (sel,re) => (sel, doSubst re))}
+            val holeRPAssn = encodeHoleRP thisHoleRP
+            val holeAssn = mkAnd $ Vector.fromList $
+              holeRPAssn::knownAssns
           in
             holeAssn
           end
@@ -296,11 +312,14 @@ struct
     
       val _ = Vector.foreach (tydbinds, processTyDBind)
       val _ = assertVCPred anteP
+      exception CegisFailure
       exception CegisSuccess of (Var.t * bool) vector
       fun cegisLoop (iter,invalidSels : Z3_Encode.assertion list) =
         let
-          val _ = assert (iter < !cegisBound, "CEGIS did not converge in "
-            ^(Int.toString $ !cegisBound)^" iterations. Terminating.\n")
+          val _ = if (iter < !cegisBound) then () else (print $ 
+            "CEGIS did not converge in " ^(Int.toString $ !cegisBound)
+            ^" iterations. Terminating.\n";
+            raise CegisFailure)
           val _ = print $ "------ CEGIS Iteration " 
             ^(Int.toString iter)^" ------\n"
           (*
@@ -320,7 +339,7 @@ struct
           val (res,model) = Z3_Encode.checkContextGetModel ctx
           val _ = doPop ()
           val _ = case res of Z3_Encode.SAT => ()
-            | _ => raise (Fail "Unable to synthesize type\n")
+            | _ => raise CegisFailure
           (*val modelStr = modelToString model
           val _ = log modelStr
           val _ = log "\n\n" *)
@@ -357,23 +376,24 @@ struct
           *)
         in
           cegisLoop (iter+1, selection :: invalidSels)
-        end handle CegisSuccess soln => soln
+        end handle CegisSuccess soln => soln (* Failure handled at
+          top-level *)
+
       val soln = cegisLoop (0,[])
       val _ = Z3_Encode.delContext ctx
       val newSels = Vector.keepAllMap (soln, 
         fn (sv,true) => SOME sv | _ => NONE)
-      val newHoleRPs = Vector.map (holeRPs, 
-        fn (RPEq {lhs,rhs}) => 
-          let
-            val rhs' = Vector.keepAll (rhs, 
-              fn (sv,_) => Vector.exists (newSels,
-                fn (sel) => varStrEq (sel,sv)))
-          in
-            RPEq {lhs=lhs, rhs=rhs'}
-          end)
+      val newHoleRP = case holeRP of RPEq {lhs,rhs} => 
+        let
+          val rhs' = Vector.keepAll (rhs, 
+            fn (sv,_) => Vector.exists (newSels,
+              fn (sel) => varStrEq (sel,sv)))
+        in
+          RPEq {lhs=lhs, rhs=rhs'}
+        end
     in
-      (newHoleRPs,newSels)
-    end
+      SOME newHoleRP
+    end handle CegisFailure => NONE
 
     fun solve (vcs,hm) = 
       let
@@ -387,13 +407,7 @@ struct
         (* 
          * First, get selectors for the hole
          *)
-        val (holeRPs, sels) = Vector.mapAndFold (rps, 
-          Vector.new0 (), fn (rp,sels) => 
-            let 
-              val (holeRP,newSels) = toHoleRP rp 
-            in
-              (holeRP, Vector.concat [newSels,sels])
-            end)
+        val holeRPSels = Vector.map (rps, toHoleRP)
         (* Only two VCs for now *)
         val [VC.T (tydbinds1,anteP1,conseqP1),
              VC.T (tydbinds2,anteP2,conseqP2)] = Vector.toList vcs
@@ -410,9 +424,11 @@ struct
           true => (tydbinds2,conseqP2) | false => (tydbinds1,conseqP1)
         val theVC = VC.T (Vector.concat [tydbinds, 
           Vector.new1 (isVC0,boolTyD)], anteP, conseqP)
-        val (holeRPs',_) = discharge (theVC,(holeRPs, sels))
-        val rps = Vector.map (holeRPs', fromHoleRP)
+        val solRPs = Vector.fromList $ Vector.fold (holeRPSels, [], 
+          fn ((holeRPWithSels),solsAcc) =>
+            case discharge theVC solsAcc holeRPWithSels of
+              NONE => solsAcc | SOME sol => (fromHoleRP sol)::solsAcc)
       in
-        HM.add (HM.empty) holeId rps
+        HM.add (HM.empty) holeId solRPs
       end
 end

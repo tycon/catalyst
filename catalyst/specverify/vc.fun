@@ -492,10 +492,11 @@ struct
       val bvTyD = TyDBinds.find env bv
       fun sortEq (t1,t2) = RelTy.equal (RelTy.Tuple $
         Vector.fromList t1, RelTy.Tuple $ Vector.fromList t2)
+      (* Following fn is a vestige *)
       fun notRhd rel = not (String.hasPrefix(RI.toString rel,
         {prefix="Rhd"}))
       val lhsRels = Vector.keepAll (rels, fn (rel,(domTyD,_)) =>
-        TyD.sameType (domTyD,bvTyD) andalso (notRhd rel))
+        TyD.sameType (domTyD,bvTyD))
       exception CRRet of RI.t * candidate_rels
       val crMap = Vector.map (lhsRels, fn (lhsRel, (_,lhsSort)) =>
         let
@@ -582,9 +583,9 @@ struct
         | If (vcp1,vcp2) => doIt vcp2 (doIt vcp1 hm)
         | Iff (vcp1,vcp2) => doIt vcp2 (doIt vcp1 hm)
         | Conj vcps => Vector.fold(vcps,hm, 
-          fn (vcp,hm') => doIt vcp hm')
+            fn (vcp,hm') => doIt vcp hm')
         | Disj vcps => Vector.fold(vcps,hm, 
-          fn (vcp,hm') => doIt vcp hm')
+            fn (vcp,hm') => doIt vcp hm')
         | Not vcp => doIt vcp hm
     in
       doIt conseqP (doIt anteP hm)
