@@ -52,6 +52,7 @@ struct
       val cfg = Z3_mk_config ()
       val _   = Z3_global_param_set ("smt.macro-finder","true")
       val _   = Z3_global_param_set ("model.partial","false")
+      val _   = Z3_global_param_set ("timeout","3")
       val ctx = Z3_mk_context cfg
       val _   = Z3_del_config cfg
     in
@@ -224,7 +225,12 @@ struct
           SR {rel = rel}
         end
 
-      fun mkStrucRelApp (SR {rel}, ast) = rel ast
+      fun mkStrucRelApp (SR {rel}, ast) = 
+        let
+          val app = rel ast
+        in
+          app
+        end
 
       fun mkSetProp (sorts : sort vector, propfn : ast vector -> 
         (z3_pattern vector * z3_ast)) =

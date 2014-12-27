@@ -253,6 +253,9 @@ struct
 
       fun applySubst subst t = exprMap t 
         (RelLang.applySubsts $ Vector.new1 subst)
+
+      fun applySubsts substs t = Vector.foldr (substs, t, 
+        fn (subst,t) => applySubst subst t)
     end
 
     structure Hole =

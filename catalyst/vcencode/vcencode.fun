@@ -96,6 +96,9 @@ struct
    *)
   fun discharge (VC.T (tydbinds,anteP,conseqP)) knownRPs (holeRP, sels) =
     let
+      val _ = print $ "Current Candidate RP:\n"
+      val _ = print $ RP.toString $ fromHoleRP $ holeRP
+      val _ = print $ "\n"
       val ctx = Z3_Encode.mkDefaultContext ()
       (*
        * APIs for the current context.
@@ -147,12 +150,24 @@ struct
         (117, ConstNotFound)
       val relMap = HashTable.mkTable (MLton.hash, strEq)
         (117, RelNotFound)
-      fun getConstForVar v = (fn vstr => HashTable.lookup constMap vstr
-        handle ConstNotFound => Error.bug ("Variable "^vstr^" undec\
-          \lared despite processing tydbinds")) (Var.toString v)
-      fun getStrucRelForRelId rid = (fn rstr => HashTable.lookup relMap
-        rstr handle RelNotFound => Error.bug ("Rel "^rstr^" undec\
-          \lared despite processing tydbinds")) (RI.toString rid)
+      fun getConstForVar v = 
+        let
+          val vstr = Var.toString v
+          val c = HashTable.lookup constMap vstr handle ConstNotFound =>
+            Error.bug ("Variable "^vstr^" undeclared despite \
+            \processing tydbinds")
+        in
+          c
+        end
+      fun getStrucRelForRelId rid = 
+        let
+          val rstr = RI.toString rid
+          val sr = HashTable.lookup relMap rstr handle RelNotFound =>
+            Error.bug ("Rel "^rstr^" undeclared despite \
+            \processing tydbinds")
+        in
+          sr
+        end
       (*
        * Add selectors to tydbinds
        *)
@@ -268,11 +283,6 @@ struct
           mkSetEqAssertion (lhsSet,rhsSet)
         end
 
-      (*
-       * Encode RPreds that are known conjuncts of the solution
-       *)
-      val knownAssns = List.map (knownRPs, encodeRelPred)
-
       fun encodeSimplePred (sp : VC.simple_pred) : Z3_Encode.assertion =
         case sp of 
           (Base bp) => encodeBasePred bp
@@ -281,10 +291,15 @@ struct
           let
             val Hole.T {substs, ...} = h
             val RPEq {lhs,rhs} = holeRP
-            val doSubst = fn re => RelLang.applySubsts 
-              (Vector.fromList substs) re
-            val thisHoleRP =  RPEq {lhs = doSubst lhs, 
-                rhs = Vector.map (rhs, fn (sel,re) => (sel, doSubst re))}
+            val substs = Vector.fromList substs
+            val doSubstInRP = fn rp => RP.applySubsts substs rp
+            val knownAssns = List.map (knownRPs, 
+              encodeRelPred o doSubstInRP)
+            val doSubstInRE = fn re => RelLang.applySubsts 
+              substs re
+            val thisHoleRP =  RPEq {lhs = doSubstInRE lhs, 
+                rhs = Vector.map (rhs, 
+                    fn (sel,re) => (sel, doSubstInRE re))}
             val holeRPAssn = encodeHoleRP thisHoleRP
             val holeAssn = mkAnd $ Vector.fromList $
               holeRPAssn::knownAssns
@@ -310,7 +325,11 @@ struct
         | VC.Conj spv => Vector.foreach (spv,assertVCPred)
         | _ => dischargeAssertion $ encodeVCPred vcp
     
+      (*
+       * Processing TyDBinds
+       *)
       val _ = Vector.foreach (tydbinds, processTyDBind)
+
       val _ = assertVCPred anteP
       exception CegisFailure
       exception CegisSuccess of (Var.t * bool) vector
@@ -339,7 +358,7 @@ struct
           val (res,model) = Z3_Encode.checkContextGetModel ctx
           val _ = doPop ()
           val _ = case res of Z3_Encode.SAT => ()
-            | _ => raise CegisFailure
+            | _ => (print "Oracle gaveup\n"; raise CegisFailure)
           (*val modelStr = modelToString model
           val _ = log modelStr
           val _ = log "\n\n" *)
@@ -376,15 +395,14 @@ struct
           *)
         in
           cegisLoop (iter+1, selection :: invalidSels)
-        end handle CegisSuccess soln => soln (* Failure handled at
-          top-level *)
-
-      val soln = cegisLoop (0,[])
+        end handle CegisSuccess soln => SOME soln 
+                 | CegisFailure => NONE
+      val cegisRes = cegisLoop (0,[])
       val _ = Z3_Encode.delContext ctx
-      val newSels = Vector.keepAllMap (soln, 
-        fn (sv,true) => SOME sv | _ => NONE)
-      val newHoleRP = case holeRP of RPEq {lhs,rhs} => 
+      fun solToHoleRP soln = case holeRP of RPEq {lhs,rhs} => 
         let
+          val newSels= Vector.keepAllMap (soln, 
+            fn (sv,true) => SOME sv | _ => NONE)
           val rhs' = Vector.keepAll (rhs, 
             fn (sv,_) => Vector.exists (newSels,
               fn (sel) => varStrEq (sel,sv)))
@@ -392,8 +410,9 @@ struct
           RPEq {lhs=lhs, rhs=rhs'}
         end
     in
-      SOME newHoleRP
-    end handle CegisFailure => NONE
+      case cegisRes of NONE => NONE 
+      | SOME soln => SOME $ solToHoleRP soln
+    end 
 
     fun solve (vcs,hm) = 
       let

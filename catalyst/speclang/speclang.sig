@@ -89,6 +89,7 @@ sig
                  | SubEq of expr * expr
       val toString : t -> string
       val applySubst : (Var.t * Var.t) -> t -> t
+      val applySubsts : (Var.t * Var.t) vector -> t -> t
     end
 
     structure Hole :
