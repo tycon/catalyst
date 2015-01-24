@@ -1,2 +1,0 @@
-Skeleton 5
-d2aã¢CORE_ML_STRUCTS"h3egp1c"ATOMS"f4ä¢Record"ä¢Tycon"ä¢Tyvar"ä¢Layout"aä¢Type"è0ac"CORE_ML"h7egp1ÿf7d"Con"d"Var"Cd"Prim"ÿÿ%d"Region"d"Const"Cd"SourceInfo"ÿ.ÿ6d"Control"ÿ>NCad"Pat"ÿad"Exp"ÿad"Lambda"ÿad"Dec"ÿad"Program"ÿN

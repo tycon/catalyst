@@ -19,6 +19,7 @@ local
    ../speclang/sources.mlb
    ../specelab/sources.mlb
    ../specverify/sources.mlb
+   ../runner/sources.mlb
    ../vcencode/sources.mlb
 
    lookup-constant.sig

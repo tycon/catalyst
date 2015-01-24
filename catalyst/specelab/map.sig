@@ -25,5 +25,6 @@ sig
   val add : t -> Key.t -> Value.t -> t
   val remove : t -> Key.t -> t
   val toVector : t -> (Key.t * Value.t) vector
+  val fromVector : (Key.t * Value.t) vector -> t
   val layout : t -> Layout.t
 end

@@ -1,0 +1,12 @@
+Group
+  signature RUNNER
+  functor Runner
+is
+  ../atoms/sources.cm
+   ../control/sources.cm
+   ../lib/mlton/sources.cm
+   ../speclang/sources.cm
+   ../core-ml/sources.cm
+   ../specelab/sources.cm
+  runner.sig
+  runner.fun

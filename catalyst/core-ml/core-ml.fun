@@ -83,6 +83,47 @@ structure Pat =
              | Wild => str "_"
          end
 
+      fun layoutSML p =
+         let
+            val t = ty p
+            val conStrEq = fn (c1,c2) => (Con.toString c1 =
+              Con.toString c2)
+            open Layout
+         in
+            case node p of
+               Con {arg, con, targs} => if conStrEq (con,Con.cons)
+                then
+                  let
+                    val [x,xs] = case arg of 
+                        SOME apat => (case #1 (dest apat) of 
+                          Tuple tup => Vector.toList tup
+                        | _ => Error.bug "Impossible case")
+                      | _ => Error.bug "Impossible case"
+                  in
+                    seq [layoutSML x,
+                         str "::",
+                         layoutSML xs]
+                  end
+                else if conStrEq (con,Con.nill) then
+                  str "[]"
+                else 
+                  seq [Con.layout con,
+                       case arg of
+                          NONE => empty
+                        | SOME p => seq [str " ", layoutSML p]]
+             | Const f => Const.layout (f ())
+             | Layered (x, p) =>
+                  seq [Var.layout x, str " as ", layoutSML p]
+             | List ps => list (Vector.toListMap (ps, layoutSML))
+             | Record r =>
+                  record (Vector.toListMap
+                          (Record.toVector r, fn (f, p) =>
+                           (Field.toString f, layoutSML p)))
+             | Tuple ps => tuple (Vector.toListMap (ps, layoutSML))
+             | Var x => Var.layout x
+             | Wild => str "_"
+         end
+
       fun wild t = make (Wild, t)
 
       fun var (x, t) = make (Var x, t)
@@ -309,6 +350,98 @@ in
             then seq [node, str " : ", Type.layout ty]
          else node
       end
+
+  (*
+   * GK: Layout functions for Runner
+   *)
+    val conStrEq = fn (c1,c2) => (Con.toString c1 =
+      Con.toString c2)
+   fun layoutDecSML d =
+      case d of
+         Datatype v =>
+            seq [str "datatype",
+                 align
+                 (Vector.toListMap
+                  (v, fn {cons, tycon, tyvars} =>
+                   seq [layoutTyvars tyvars,
+                        str " ", Tycon.layout tycon, str " = ",
+                        align
+                        (separateLeft (Vector.toListMap (cons, layoutConArg),
+                                       "| "))]))]
+       | Exception ca =>
+            seq [str "exception ", layoutConArg ca]
+       | Fun {decs, ...} => layoutFunsSML decs
+       | Val {rvbs, vbs, ...} =>
+            align [layoutFunsSML  rvbs,
+                   align (Vector.toListMap
+                          (vbs, fn {exp, pat, ...} =>
+                           seq [str "val",
+                                mayAlign [seq [ str " ", Pat.layout pat,
+                                               str " ="],
+                                          layoutExpSML exp]]))]
+   and layoutExpSML (Exp {node, ...}) =
+      case node of
+         App (e1 as (Exp {node=node1, ...}), 
+              e2 as (Exp {node=node2, ...})) => 
+            (case (node1, node2) of
+              (Con (c,_),Record rcrd) => if conStrEq (c,Con.cons) 
+                  then 
+                    let
+                      val [xlyt,xslyt] = Vector.toListMap 
+                        (Record.toVector rcrd, 
+                          fn (_,arge) => layoutExpSML arge)
+                    in
+                      seq [xlyt, str "::", xslyt]
+                    end
+                  else
+                    paren (seq [layoutExpSML e1, str " ", 
+                               layoutExpSML e2])
+            | _ => paren (seq [layoutExpSML e1, str " ", 
+                               layoutExpSML e2]))
+       | Case {rules, test, ...} =>
+            Pretty.casee {default = NONE,
+                          rules = Vector.map (rules, fn {exp, pat, ...} =>
+                                              (Pat.layoutSML pat, layoutExpSML exp)),
+                          test = layoutExpSML test}
+       | Con (c,_) => Con.layout c
+       | Const f => Const.layout (f ())
+       | EnterLeave (e, si) =>
+            seq [str "EnterLeave ",
+                 tuple [layoutExpSML e, SourceInfo.layout si]]
+       | Handle {catch, handler, try} =>
+            Pretty.handlee {catch = Var.layout (#1 catch),
+                            handler = layoutExpSML handler,
+                            try = layoutExpSML try}
+       | Lambda l => layoutLambda l
+       | Let (ds, e) =>
+            Pretty.lett (align (Vector.toListMap (ds, layoutDecSML)),
+                         layoutExpSML e)
+       | List es => list (Vector.toListMap (es, layoutExpSML))
+       | PrimApp {args, prim, ...} =>
+            Pretty.primApp {args = Vector.map (args, layoutExpSML),
+                            prim = Prim.layout prim,
+                            targs = Vector.new0 ()}
+       | Raise e => Pretty.raisee (layoutExpSML e)
+       | Record r =>
+            Record.layout
+            {extra = "",
+             layoutElt = layoutExpSML,
+             layoutTuple = fn es => tuple (Vector.toListMap (es, layoutExpSML)),
+             record = r,
+             separator = " = "}
+       | Seq es => Pretty.seq (Vector.map (es, layoutExpSML))
+       | Var (var, _) => Var.layout (var ())
+   and layoutFunsSML decs  =
+      if 0 = Vector.length decs
+         then empty
+      else
+         align [seq [str "val rec"],
+                indent (align (Vector.toListMap
+                               (decs, fn {lambda as Lam {argType, body = Exp {ty = bodyType, ...}, ...}, var} =>
+                                align [seq [Var.layout var, str " = "],
+                                       indent (layoutLambda lambda, 3)])),
+                        3)]
+
 end
 
 structure Lambda =
@@ -336,6 +469,7 @@ structure Exp =
       datatype noMatch = datatype noMatch
 
       val layout = layoutExp
+      val layoutSML = layoutExpSML
       val layoutWithType = layoutExpWithType
 
       local
@@ -480,6 +614,7 @@ structure Dec =
       datatype t = datatype dec
 
       val layout = layoutDec
+      val layoutSML = layoutDecSML
    end
 
 structure Program =

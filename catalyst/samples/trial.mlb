@@ -1,0 +1,7 @@
+local
+  $(SML_LIB)/basis/basis.mlb
+  $(SML_LIB)/smlnj-lib/Util/smlnj-lib.mlb
+in
+  set.sml
+  trial.sml
+end

@@ -20,4 +20,5 @@ struct
   fun toVector map = Vector.fromList map
   fun layout map = L.align (List.map (map, fn (k,v) =>
     L.seq [Key.layout k, L.str " :-> ", Val.layout v]))
+  fun fromVector vec = Vector.toList vec
 end

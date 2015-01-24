@@ -196,7 +196,7 @@ struct
                 let
                   val recvars = Vector.map ((#yes o Vector.partition) 
                     (unifyConArgs ve con vars, fn (_,_,_,isrec) => isrec),
-                      fn (cvar,_,_,_) => cvar)
+                      fn (_,var,_,_) => var)
                   val recRApps = Vector.map (recvars, fn var => 
                     RelLang.app (id,var))
                   val recRAppsUnion = Vector.fold (recRApps,

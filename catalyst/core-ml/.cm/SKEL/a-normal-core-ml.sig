@@ -1,2 +1,0 @@
-Skeleton 5
-d2aγΆA_NORMAL_CORE_ML_STRUCTS"h3egp1c"ATOMS"f5CδΆRecord"d"TypeDesc"δΆTycon"δΆTyvar"δΆLayout"NaδΆType"θ0ac"A_NORMAL_CORE_ML"h7egp1ÿf5Cd"Con"d"Var"d"Prim"ÿÿ/Cd"Const"d"SourceInfo"ÿÿÿNCad"Pat"θ±αδΆVal"ÿ%ad"Exp"ÿƒad"Lambda"ÿ%ad"Dec"ÿ%ad"Program"ÿ%N

@@ -1,2 +1,0 @@
-Skeleton 5
-d3f1ä¢Layout"aã¢INTERFACE_STRUCTS"h2aä¢Ast"gp1c"AST"aä¢EnvTypeStr"h3áä¢AdmitsEquality"çğ±ã¢ADMITS_EQUALITY"áä¢Kind"çğ±ã¢TYCON_KIND"aä¢Tycon"h1ad"BindingStrength"gp1c"BINDING_STRENGTH"ac"INTERFACE"h5Cegp1ÿf5Cÿ%d"Region"ÿ5d"PropertyList"ÿNÿÿ+ad"FlexibleTycon"è0Caÿ‚ÿ„ad"Tyvar"ÿ„ad"Record"gp1c"RECORD"ad"Type"ÿ„ad"Status"ÿ„Cad"Time"ÿ„ad"Scheme"ÿ„ad"Cons"ÿ„ad"TypeStr"ÿ„ad"TyconMap"ÿ„N

@@ -24,6 +24,7 @@ is
 ../speclang/sources.cm
 ../specelab/sources.cm
 ../specverify/sources.cm
+ ../runner/sources.cm
 
 lookup-constant.sig
 lookup-constant.fun

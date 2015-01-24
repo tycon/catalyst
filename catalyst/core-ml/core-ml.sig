@@ -26,6 +26,7 @@ signature CORE_ML_STRUCTS =
             val tuple: t vector -> t
             val unit: t
             val var : Tyvar.t -> t
+            val toMyType : t -> TypeDesc.t
          end
    end
 
@@ -56,6 +57,7 @@ signature CORE_ML =
             val isUnit: t -> bool
             val isWild: t -> bool
             val layout: t -> Layout.t
+            val layoutSML: t -> Layout.t
             val make: node * Type.t -> t
             val node: t -> node
             val var: Var.t * Type.t -> t
@@ -123,6 +125,7 @@ signature CORE_ML =
             val isExpansive: t -> bool
             val lambda: lambda -> t
             val layout: t -> Layout.t
+            val layoutSML: t -> Layout.t
             val layoutWithType: t -> Layout.t
             val make: node * Type.t -> t
             val node: t -> node
@@ -175,6 +178,7 @@ signature CORE_ML =
                              patRegion: Region.t} vector}
 
             val layout: t -> Layout.t
+            val layoutSML : t -> Layout.t
          end
       sharing type Exp.dec = Dec.t
 

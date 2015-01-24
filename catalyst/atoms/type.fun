@@ -63,6 +63,8 @@ functor TypeDesc (S: TYPE_DESC_STRUCTS): TYPE_DESC =
         | (_,_) => false
       end
 
+    val equal = sameType
+
     fun unifiable (t1,t2) = case (t1,t2) of
         (Tunknown,_) => false
       | (_,Tunknown) => true

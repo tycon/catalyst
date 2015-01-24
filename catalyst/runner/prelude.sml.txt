@@ -1,0 +1,18 @@
+exception CatalystMeta;
+
+open Set
+
+val log = TextIO.print
+
+val tabulate = List.tabulate
+
+fun map2 ([],[],f) = []
+  | map2 (x::xs,y::ys,f) = (f(x,y))::(map2 (xs,ys,f))
+
+val rand = Random.rand (1,9999)
+
+fun randInt () = Random.randInt rand
+
+fun catalystGenList n = if (n<=0) then [] else
+  (randInt())::(catalystGenList (n-1))
+

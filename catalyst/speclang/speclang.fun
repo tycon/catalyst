@@ -373,6 +373,9 @@ struct
     fun exists (tyb,t) = Exists (tyb,t)
 
     fun dot (t1,t2) = Dot (t1,t2)
+
+    fun isHoleWithId (Hole h) holeId = Hole.idEq (Hole.idOf h, holeId)
+      | isHoleWithId _ _ = false
   end
 
   structure RefinementType =
@@ -472,6 +475,18 @@ struct
       in
         binds
       end
+
+    fun invIsHoleWithId refTy holeId = case refTy of 
+        Base (bv,tyd,p) => Predicate.isHoleWithId p holeId
+      | Arrow (_,t) => invIsHoleWithId t holeId
+      | _ => false
+
+    fun getArgVarTyDs (t:t) = case t of
+        Base _ => []
+      | Tuple _ => raise (Fail "Unimpl.")
+      | Arrow ((v,Base (_,tyd,_)),t2) => (v,tyd)::(getArgVarTyDs t2)
+      | Arrow _ => raise (Fail "No argvar for higher-order arg")
+      
   end
 
   structure RefinementTypeScheme =
@@ -512,6 +527,9 @@ struct
           RefinementType.mapTyD refty 
             (TypeDesc.instantiateTyvars substs)
         end
+
+      fun invIsHoleWithId (T {refty,...}) holeId = 
+          RefinementType.invIsHoleWithId refty holeId
     end
 
   structure RelSpec =

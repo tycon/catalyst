@@ -6,5 +6,5 @@ relation Robs = Rob*;
 relation Roa (cons(x,xs)) = Rmem(xs) X {(x)} | nil = {()};
 relation Roas = Roa*;
 *)
-
+assume catalystGenList : n -> {l | true};
 concat : l1 -> l2 -> { l | ??};

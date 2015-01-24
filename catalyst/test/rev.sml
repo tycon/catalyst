@@ -1,3 +1,6 @@
+
+val randInt = fn _ => 1
+
 exception Catalyst;
 
 fun concat l1 l2 = case l1 of
@@ -11,3 +14,6 @@ fun rev l = case l of
 fun snoc n l = case l of
     [] => [n]
   | x::xs => x::(snoc n xs)
+
+fun catalystGenList n = if (n<=0) then [] else
+  (randInt())::(catalystGenList (n-1))

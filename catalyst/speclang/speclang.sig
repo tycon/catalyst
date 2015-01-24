@@ -6,6 +6,7 @@ signature SPEC_LANG =
 sig
   include SPEC_LANG_STRUCTS
 
+  val varStrEq : Var.t * Var.t -> bool
   structure RelLang : 
   sig
     structure RelId : ID
@@ -164,6 +165,8 @@ sig
     val exnTyp : unit -> t
     (* pre-condition: input t must be a Tuple _ *)
     val decomposeTupleBind : Var.t*t -> (Var.t*t) vector
+    val invIsHoleWithId : t -> Predicate.Hole.id -> bool
+    val getArgVarTyDs : t -> (Var.t * TypeDesc.t) list
       
   end
 
@@ -180,6 +183,7 @@ sig
       val specialize: t -> RefinementType.t
       val instantiate : t * TypeDesc.t vector -> RefinementType.t
       val layout : t -> Layout.t 
+      val invIsHoleWithId : t -> Predicate.Hole.id -> bool
     end
 
   structure RelSpec : 

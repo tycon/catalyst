@@ -122,7 +122,13 @@ structure SpecVerify = SpecVerify (structure VE = VE
                                    structure ANormalCoreML = ANormalCoreML)
 
 structure VC = SpecVerify.VC
+structure HM = VC.HoleMap
+structure Runner = Runner (structure CoreML = CoreML
+                           structure VE = VE
+                           structure RE = RE
+                           structure HM = HM)
 
+(*
 val (z3_log,z3_log_close) = (fn stream => 
   (fn str => (Out.output (stream,str);
       Out.flush stream), 
@@ -131,7 +137,7 @@ val (z3_log,z3_log_close) = (fn stream =>
 
 structure VCE = VCEncode (structure VC = VC
                           val z3_log = z3_log)
-
+*)
 (* ------------------------------------------------- *)
 (*                 Lookup Constant                   *)
 (* ------------------------------------------------- *)
@@ -588,12 +594,17 @@ in
             val holeMap = VC.fillHoles elabvcs
             val _ = Control.saveToFile ({suffix = "hm"}, No, holeMap,
                                       Layout VC.HoleMap.layout)
+            (*
+             * Eliminate trivially wrong disjuncts from candidate
+             * solutions by running the code on concrete input.
+             *)
+            val holeMap' = Runner.refineHM userDecs ve re holeMap
+            (*
             val _ = VCE.setCegisBound (!cegisBound)
-            val solHM = VCE.solve (elabvcs,holeMap)
+            val solHM = VCE.solve (elabvcs,holeMap')
             val _ = Control.saveToFile ({suffix = "sol"}, No, solHM,
                                       Layout VC.HoleMap.layout)
 
-            (*
             exception CantDischargeVC
             fun dischargeVC (i,vc) = case VCE.discharge vc of
                 VCE.Success => print ("VC# "^(Int.toString i)^" discharged\n")
