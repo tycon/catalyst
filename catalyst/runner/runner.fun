@@ -17,7 +17,12 @@ struct
   fun $ (f,arg) = f arg
   infixr 5 $
 
+  val inputFile = ref "bogus"
+  fun setInputFile str = (inputFile := str)
   val generatorPrefix = "catalystGen"
+  val sampleFilePath = "samples/sample.sml"
+  fun writeSample str = File.withOut (sampleFilePath, 
+    fn outS => Out.output (outS,str))
 
   fun isGeneratorName s = 
     let
@@ -155,6 +160,15 @@ struct
     end
     | toHoleRP _ = raise (Fail "Hole RP structure is not as \
         \ expected.")
+
+  fun fromHoleRP (RPEq {lhsRel, lhsVar, rhsExprs}) = 
+    let
+      open RelLang
+      val lhsre = app (lhsRel,lhsVar)
+      val rhsre = List.fold (rhsExprs, emptyexpr (), union)
+    in
+      RP.Eq (lhsre,rhsre)
+    end
 
   fun unwrapLambda lam = 
     let 
@@ -354,12 +368,53 @@ struct
           mainfHdr^"\n"^mainfBody
         end
       val preStr = readPrelude ()
-      val _ = print "\nSML:\n"
-      val _ = print $ preStr ^ relDecsStr ^ selDecsStr ^ candDecsStr
-                    ^ "\n\n" ^ instrfStr ^ "\n" ^fStr ^ "\n" ^ mainfStr
+      (*val _ = print "\nSML:\n"*)
+      val _ = writeSample $ preStr ^ relDecsStr ^ selDecsStr 
+                          ^ candDecsStr ^ "\n\n" ^ instrfStr 
+                          ^ "\n" ^fStr ^ "\n" ^ mainfStr ^ "\n"
+      (*
+       * Compile the sample.
+       *)
+      val _ = Process.call' ("mlton", ["samples/sample.mlb"])
+      (*
+       * Run the sample
+       *)
+      val sampleOut = Process.callWithIn ("./samples/sample", [],
+        fn inS => In.inputAll inS)
+      (*
+      val _ = print "Here is the sample output:\n"
+      val _ = print sampleOut
       val _ = print "\n"
+      *)
+      val llen = List.length
+      val vlen = Vector.length
+      val lines = List.keepAll (String.split (sampleOut,#"\n"),
+        fn line => not (line = ""))
+      val (nlines, npreds) = (llen lines, vlen holeRPs)
+      val _ = assert (nlines = npreds, "Sample run output\
+        \ failed sanity check. nlines="^(Int.toString nlines)
+        ^". npreds="^(Int.toString npreds)^".\n")
+      val holeRPs' = Vector.map2 (holeRPs, Vector.fromList lines, 
+        fn (RPEq {lhsRel, lhsVar, rhsExprs}, line) => 
+          let
+            val _ = print $ "Processing line: "^line^".\n"
+            val flags = List.map (String.explode $ 
+              String.deleteSurroundingWhitespace line,
+              fn c => fromJust $ Char.digitToInt c)
+            val (nflags, ndisjuncts) = (llen flags, llen rhsExprs)
+            val _ = assert (nflags = ndisjuncts, "Sample run output\
+              \ failed sanity check. nflags = "^(Int.toString nflags)
+              ^". ndisjuncts = "^(Int.toString ndisjuncts)^".\n")
+            val (_,rhsExprs') = List.unzip $ List.keepAll (
+              List.zip (flags,rhsExprs), fn (flag,_) => flag=1)
+            val _ = print $ (Int.toString $ llen rhsExprs')^
+                  " RHSExprs remain for "^(RI.toString lhsRel)^"\n"
+          in
+            RPEq {lhsRel=lhsRel, lhsVar=lhsVar, rhsExprs=rhsExprs'}
+          end)
+      val relpreds' = Vector.map (holeRPs', fromHoleRP)
     in
-      (holeId,relpreds)
+      (holeId,relpreds')
     end
 
   fun refineHM userDecs ve re hm = HM.fromVector $ 

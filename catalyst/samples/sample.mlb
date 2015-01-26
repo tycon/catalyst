@@ -3,6 +3,6 @@ local
   $(SML_LIB)/smlnj-lib/Util/smlnj-lib.mlb
 in
   set.sml
-  rev1.sml
+  sample.sml
   samplemain.sml
 end

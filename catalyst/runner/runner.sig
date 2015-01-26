@@ -16,5 +16,6 @@ end
 signature RUNNER =
 sig
   include RUNNER_STRUCTS
+  val setInputFile : string -> unit
   val refineHM : CoreML.Dec.t vector -> VE.t -> RE.t -> HM.t -> HM.t
 end

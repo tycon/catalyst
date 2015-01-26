@@ -20,9 +20,9 @@ hpux)
 ;;
 esac
 # Uncomment the following line and ...
-#mlton="./make"
+mlton="./make"
 # comment the following to execute catalyst compiled with mlton
- smlnj='sml'
+#smlnj='sml'
 if $smlnj -h >/dev/null 2>&1; then
         smlnj_heap_suffix=`echo 'TextIO.output (TextIO.stdErr, SMLofNJ.SysInfo.getHeapSuffix ());' | $smlnj 2>&1 1> /dev/null`
         mlton_smlnj_heap="mlton-smlnj.$smlnj_heap_suffix"
