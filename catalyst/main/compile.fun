@@ -123,6 +123,9 @@ structure SpecVerify = SpecVerify (structure VE = VE
 
 structure VC = SpecVerify.VC
 
+structure VCS = VCSolve (structure VC = VC)
+structure HM = VCS.HoleMap
+
 (*
 val (z3_log,z3_log_close) = (fn stream => 
   (fn str => (Out.output (stream,str);
@@ -583,11 +586,25 @@ in
                 stats = fn _ => Layout.empty,
                 style = Control.ML,
                 suffix = "elabvcs",
-                thunk = (fn () =>Vector.map (vcs, fn vc =>
-                    VC.elaborate (re,vc)))
+                thunk = (fn () => VC.elaborateAll (re,vcs))
               }
             val _ = Control.saveToFile ({suffix = "evcs"}, No, elabvcs,
                                       Layouts VC.layouts)
+            (*
+             * VC solving
+             *)
+            val holeMap = Control.pass 
+              {
+                display = Control.NoDisplay,
+                name = "Solve VC Constraints",
+                stats = fn _ => Layout.empty,
+                style = Control.ML,
+                suffix = "vcsolve",
+                thunk = (fn () => VCS.solve elabvcs)
+              }
+            val _ = Control.saveToFile ({suffix = "hm"}, No, holeMap,
+                                      Layout HM.layout)
+            
             (*
             exception CantDischargeVC
             fun dischargeVC (i,vc) = case VCE.discharge vc of

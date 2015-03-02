@@ -302,7 +302,11 @@ struct
     open Map
   end
 
-  fun elaborate (re,vc) =
+  exception HoleRelNotFound
+  val (hrMap: (string, RP.expr) HashTable.hash_table) = 
+      HashTable.mkTable (MLton.hash, op=) (117, HoleRelNotFound)
+
+  fun elaborate re (vc,rinstTab) =
     let
       val T (tydbinds,anteP,conseqP) = vc
 
@@ -390,10 +394,10 @@ struct
         | If vcps => mapSnd If $ mapFoldTuple rinstTab elabVCPred vcps
         | Iff vcps => mapSnd Iff $ mapFoldTuple rinstTab elabVCPred vcps
 
-      val (rinstTab,anteP') = elabVCPred RelInstTable.empty anteP
-      val (rinstTab,conseqP') = elabVCPred rinstTab conseqP
+      val (rinstTab',anteP') = elabVCPred rinstTab anteP
+      val (rinstTab'',conseqP') = elabVCPred rinstTab' conseqP
 
-      val newtydbinds = Vector.map (RelInstTable.toVector rinstTab,
+      val reltydbinds = Vector.map (RelInstTable.toVector rinstTab'',
         fn (RInst (relId,tydvec),relId') =>
           let
             val {ty,map} = RE.find re relId handle RE.RelNotFound _ =>
@@ -407,10 +411,72 @@ struct
             (relvid,relTyD)
           end)
 
-      val tydbinds' = Vector.concat [tydbinds,newtydbinds]
+      val tydbinds' = Vector.concat [tydbinds,reltydbinds]
+
+      val rels = Vector.map (reltydbinds, 
+          fn (relvid,TyD.Tarrow (TyD.Trecord tupRec,_)) =>
+            let
+              val domTyD::sort= Vector.toList $ Record.range tupRec
+            in
+              (relvid,(domTyD,sort))
+            end)
+
+      fun elabIfHole (Hole (P.Hole.T {substs,bv,id=holeId,env})) : vc_pred = 
+          let
+            val bvTyD = TyDBinds.find env bv
+            fun sortEq (t1,t2) = RelTy.equal (RelTy.Tuple $
+              Vector.fromList t1, RelTy.Tuple $ Vector.fromList t2)
+            val lhsRels = Vector.keepAll (rels, fn (_,(domTyD,_)) =>
+              TyD.sameType (domTyD,bvTyD)) 
+            val rpreds = Vector.map (lhsRels, fn (relvid,(_,sort)) => 
+              let
+                val relId = RI.fromString $ Var.toString relvid
+                val lhs = RelLang.applySubsts (Vector.fromList substs) 
+                    $ RelLang.app (relId,bv)
+                fun toStr (h,r) = "(" ^ h ^ ", "^ (RI.toString r) ^ ")"
+                val hrStr = toStr (holeId,relId)
+                val rhs = HashTable.lookup hrMap hrStr
+                  handle HoleRelNotFound => 
+                    let
+                      val alpha = RelLang.newAlpha (holeId,substs,
+                                    RelTy.Tuple $ Vector.fromList sort)
+                      val _ = HashTable.insert hrMap (hrStr, alpha)
+                      (*
+                      val _ = print $ "HT Keys: "
+                      val _ = print $ List.toString (fn (hrStr,_) => hrStr)
+                          (HashTable.listItemsi hrMap)
+                      val _ = print "\n"
+                      *)
+                    in
+                      alpha
+                    end 
+              in
+                RP.Eq (lhs,rhs)
+              end)
+          in
+            Conj $ Vector.map (rpreds, Simple o Rel)
+          end
+        | elabIfHole sp = Simple sp
+
+      fun elabHolesInVCPred vcpred = case vcpred of
+          Simple sp  => elabIfHole sp
+        | Conj vcps => Conj $ Vector.concatV $ Vector.map 
+            (vcps, fn vcp => case elabHolesInVCPred vcp of 
+                Conj vcps' => vcps' 
+              | vcp' => Vector.new1 vcp')
+        | Disj vcps => Disj $ Vector.map (vcps, elabHolesInVCPred)
+        | Not vcp => Not $ elabHolesInVCPred vcp
+        | If (vcp1,vcp2) => If (elabHolesInVCPred vcp1, elabHolesInVCPred vcp2)
+        | Iff (vcp1,vcp2) => Iff (elabHolesInVCPred vcp1, elabHolesInVCPred vcp2)
+
+      val anteP'' = elabHolesInVCPred anteP'
+      val conseqP'' = elabHolesInVCPred conseqP'
     in
-      T (tydbinds',anteP',conseqP')
+      (T (tydbinds',anteP'',conseqP''), rinstTab'')
     end
+
+  fun elaborateAll (re,vcs) = #1 $ Vector.mapAndFold (vcs,
+    RelInstTable.empty, (elaborate re))
 
   fun layout (vcs : t vector) =
     let

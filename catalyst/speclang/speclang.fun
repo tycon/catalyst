@@ -15,17 +15,6 @@ struct
   struct
     structure RelId = Var
 
-    datatype elem = Int of int
-                  | Bool of bool
-                  | Var of Var.t
-    datatype expr = T of elem vector
-                  | X of expr * expr
-                  | U of expr * expr
-                  | D of expr * expr
-                  | R of RelId.t * Var.t
-
-    datatype term = Expr of expr
-                  | Star of RelId.t
     structure RelType =
     struct
       (*
@@ -100,6 +89,21 @@ struct
            relty = RelType.crossPrdType (relty1,relty2)}
     end
 
+    datatype elem = Int of int
+                  | Bool of bool
+                  | Var of Var.t
+    datatype expr = T of elem vector
+                  | X of expr * expr
+                  | U of expr * expr
+                  | D of expr * expr
+                  | R of RelId.t * Var.t
+                  | Alpha of {id:int, holeId: string, 
+                              substs: (Var.t*Var.t) list,
+                              sort : RelType.t}
+
+    datatype term = Expr of expr
+                  | Star of RelId.t
+
     val elemToString = fn el => case el of
         Int i => Int.toString i
       | Bool b => Bool.toString b
@@ -115,6 +119,9 @@ struct
       | D (e1,e2) => "(" ^ (exprToString e1) ^ " - " 
           ^ (exprToString e2) ^ ")"
       | R (rel,arg) => (RelId.toString rel) ^ "(" ^ (Var.toString arg) ^ ")"
+      | Alpha {id, holeId, substs, ...} => (List.toString (fn (v1,v2) => 
+            "["^ (Var.toString v1) ^ "/" ^ (Var.toString v2) ^"]")
+            substs) ^ holeId ^".@" ^ (Int.toString id)
     
     val exprToString = exprToString
 
@@ -122,10 +129,14 @@ struct
         Expr e => exprToString e
       | Star r => (RelId.toString r) ^ "*"
 
+    val count = ref 0
+    fun genAlphaId () = (count := (!count) + 1; !count)
     fun app (relId,var) = R(relId,var)
     fun union (e1,e2) = U (e1,e2)
     fun crossprd (e1,e2) = X (e1,e2)
     fun diff (e1,e2) = D (e1,e2)
+    fun newAlpha (holeId, substs, sort) = Alpha {substs=substs,
+        holeId=holeId, id=genAlphaId(), sort=sort}
     fun emptyexpr _ = T (Vector.fromList [])
     fun applySubsts substs rexpr = 
       let
@@ -143,7 +154,22 @@ struct
         | U (e1,e2) => U (doIt e1, doIt e2)
         | D (e1,e2) => D (doIt e1, doIt e2)
         | R (relId,argvar) => R (relId, subst argvar)
+        | Alpha {substs=pSubsts, id, holeId, sort} => Alpha 
+            {id=id, holeId=holeId, sort=sort,
+              substs = List.concat [Vector.toList substs, pSubsts]} 
       end
+    fun mapRApp expr f = 
+      let
+        fun doItTup (x1,x2) = (mapRApp x1 f, mapRApp x2 f)
+      in
+         case expr of
+           X x => X $ doItTup x
+         | U x => U $ doItTup x
+         | D x => D $ doItTup x
+         | R _ => f expr
+         | _ => expr
+      end
+
   end
 
   structure StructuralRelation =
@@ -247,6 +273,9 @@ struct
 
       fun applySubst subst t = exprMap t 
         (RelLang.applySubsts $ Vector.new1 subst)
+
+      fun applySubsts substs t = Vector.foldr (substs, t, fn (subst,t) =>
+        applySubst subst t)
     end
 
     structure Hole =
@@ -285,6 +314,8 @@ struct
 
       fun applySubst subst (T {substs,bv,id,env}) =
         make (subst::substs, bv, id, env)
+
+      fun equal (T {id=id1, ...}, T {id=id2,...}) = id1 = id2
     end
 
     datatype t =  True

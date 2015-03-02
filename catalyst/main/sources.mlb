@@ -19,7 +19,8 @@ local
    ../speclang/sources.mlb
    ../specelab/sources.mlb
    ../specverify/sources.mlb
-   ../vcencode/sources.mlb
+   (* ../vcencode/sources.mlb *)
+   ../vcsolve/sources.mlb
 
    lookup-constant.sig
    lookup-constant.fun

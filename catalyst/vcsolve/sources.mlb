@@ -9,19 +9,15 @@
 local
   $(SML_LIB)/smlnj-lib/Util/smlnj-lib.mlb
   $(SML_LIB)/basis/basis.mlb
-   ../atoms/sources.mlb
-   ../control/sources.mlb
-   ../lib/mlton/sources.mlb
-   ../speclang/sources.mlb
-   ../core-ml/sources.mlb
+
+  ../atoms/sources.mlb
+  ../control/sources.mlb
+  ../lib/mlton/sources.mlb
    ../specelab/sources.mlb
-   vc.sig
-   vc.fun
-   specverify.sig
-   specverify.fun
+  ../specverify/sources.mlb
+  vcsolve.sig
+  vcsolve.fun
 in
-  signature VERIFICATION_CONDITION
-  functor VerificationCondition
-  signature SPEC_VERIFY
-  functor SpecVerify
+  signature VC_SOLVE
+  functor VCSolve
 end

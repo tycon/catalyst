@@ -39,6 +39,9 @@ sig
                   | U of expr * expr
                   | D of expr * expr
                   | R of RelId.t * Var.t
+                  | Alpha of {id:int, holeId:string,
+                              sort: RelType.t, 
+                              substs: (Var.t*Var.t) list}
     datatype term = Expr of expr
                   | Star of RelId.t
     val elemToString : elem -> string
@@ -50,6 +53,9 @@ sig
     val diff : expr * expr -> expr
     val emptyexpr : unit -> expr
     val applySubsts : (Var.t * Var.t) vector -> expr -> expr
+    (* newAlpha : holeId * substs -> expr *)
+    val newAlpha : (string * (Var.t * Var.t) list * RelType.t) -> expr
+    val mapRApp : expr -> (expr -> expr) -> expr
   end
 
   structure StructuralRelation :
@@ -89,20 +95,21 @@ sig
                  | SubEq of expr * expr
       val toString : t -> string
       val applySubst : (Var.t * Var.t) -> t -> t
+      val applySubsts : (Var.t * Var.t) vector -> t -> t
     end
 
     structure Hole :
     sig
-      type id
       datatype t =  T of {substs: (Var.t * Var.t) list,
                           bv:Var.t,
-                          id:id,
+                          id:string,
                           env:TyDBinds.t}
       val new : unit -> t
-      val make : (Var.t * Var.t) list * Var.t * id * TyDBinds.t -> t
-      val idOf : t -> id
+      val make : (Var.t * Var.t) list * Var.t * string * TyDBinds.t -> t
+      val idOf : t -> string
       val applySubst : (Var.t * Var.t) -> t -> t
       val toString : t -> string
+      val equal : t*t -> bool
     end
 
     datatype t =  True
