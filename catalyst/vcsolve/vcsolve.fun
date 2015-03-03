@@ -16,44 +16,173 @@ struct
   val assert = Control.assert
   val empty_set = Vector.new0 ()
   fun varStrEq (v1,v2) = (Var.toString v1 = Var.toString v2)
+  exception NotPrefix
+  fun suffix (vec1, vec2, isEq) = 
+    let
+      val len = Vector.length
+      val len2 = len vec2
+      val _ = if len2 >= len vec1 then raise NotPrefix
+                else ()
+      val prefix1 = Vector.prefix (vec1, len2)
+      val _ = if Vector.forall2 (prefix1,vec2, isEq) then ()
+                else raise NotPrefix
+    in
+      Vector.dropPrefix (vec1,len2)
+    end
+  (*
+   * Converts list of sets to set of lists
+   * flatten [[a,b],[c],[d]] = [[a,c,d],[b,c,d]]
+   *)
+  fun flatten (l : 'a list list) : 'a list list = case l of
+      [] => []
+    | xs::yszs => List.concat $ List.map (xs, fn x => 
+        List.map (flatten yszs, fn yz => x::yz))
+    
+  fun listCrossPrd (l1,l2,f) = case l2 of
+      [] => []
+    | x2::xs2 => List.concat 
+        [List.foldr (l1,x2, 
+            fn (x1,acc) => (f (x1,x2))::acc), 
+         listCrossPrd (l1,xs2,f)]
   fun rappEq (RelLang.R (rid1,vid1), RelLang.R (rid2,vid2)) =
     RI.toString rid1 = RI.toString rid2 andalso
     Var.toString vid1 = Var.toString vid2
-  fun sanitizeRE re = 
-    let
-      open RelLang
-      val len = Vector.length
-    in
+  local
+    open RelLang
+  in
+    fun allDisjsInRExpr (re : RelLang.expr) : RelLang.expr list =
       case re of 
-        U (T el, re') => (assert (len el = 0, "Constant sets \
-          \Unimpl."); sanitizeRE re')
-      | U (re', T el) => (assert (len el = 0, "Constant sets \
-          \Unimpl."); sanitizeRE re')
-      | U (re',re'') => U (sanitizeRE re', sanitizeRE re'')
-      | ratom => ratom
-    end
+        U (re1,re2) => List.concat [allDisjsInRExpr re1,
+                                    allDisjsInRExpr re2]
+      | D _ => raise (Fail "Unimpl.")
+      | _ => [re]
 
-  fun toDNF re = raise (Fail "Unimpl.")
+    fun allRappsInRatom (ratom : RelLang.expr) : RelLang.expr list = 
+      case ratom of
+          R _ => [ratom]
+        | X (e1,e2) => List.concat [allRappsInRatom e1, allRappsInRatom e2]
+        | T els => []
+        | _ => Error.bug "allRappsInRatom: DNF assumption violated"
 
-  fun allInpCombosOfSort dom sort = raise (Fail "Unimpl.")
+    fun crossPrdOf (expr::exprs) = List.fold (exprs, expr, 
+          fn (expr,acc) => crossprd (acc,expr))
+      | crossPrdOf [expr] = expr
+      | crossPrdOf [] = RelLang.T empty_set
 
-  fun sameRE (re1,re2) = 
-    let
-      val len = Vector.length
-      open RelLang
-    in
-      case (re1,re2) of
-        (U (re11,re12), U (re21,re22)) => sameRE (re11,re21) 
-              andalso sameRE (re12,re22)
-      | (X (re11,re12), X (re21,re22)) => sameRE (re11,re21) 
-              andalso sameRE (re12,re22)
-      | (D (re11,re12), D (re21,re22)) => sameRE (re11,re21) 
-              andalso sameRE (re12,re22)
-      | (rapp1 as R _, rapp2 as R _) => rappEq (rapp1,rapp2)
-      | (T els1, T els2) => len els1 = 0 andalso len els1 = len els2 
-      | _ => false
+    fun unionOf [] = RelLang.T empty_set
+      | unionOf [re] = re
+      | unionOf (re::rest) = U (re,unionOf rest)
 
-    end
+    fun sanitizeRE re = 
+      let
+        val len = Vector.length
+      in
+        case re of 
+          U (T el, re') => (assert (len el = 0, "Constant sets \
+            \Unimpl."); sanitizeRE re')
+        | U (re', T el) => (assert (len el = 0, "Constant sets \
+            \Unimpl."); sanitizeRE re')
+        | U (re',re'') => U (sanitizeRE re', sanitizeRE re'')
+        | ratom => ratom
+      end
+
+    fun toDNF (U (re1,re2)) = U (toDNF re1, toDNF re2)
+      | toDNF (X (U (re11,re12),re2)) = U (toDNF (X (re11,re2)),
+                                           toDNF (X (re12,re2)))
+      | toDNF (X (re1,U (re21,re22))) = U (toDNF (X (re1,re21)),
+                                           toDNF (X (re1,re22)))
+      | toDNF (D _) = raise (Fail "Unimpl.")
+      | toDNF re = re
+
+    fun allInpCPsOfSort dom (RelTy.Tuple tyds) = 
+      if Vector.length tyds = 0 then [] 
+      else List.concat $ List.keepAllMap (dom,
+          fn (bigS,RelTy.Tuple tyds') => 
+            let
+              val restTyDs = suffix (tyds, tyds', TyD.sameType)
+              val atoms'= allInpCPsOfSort dom $
+                                  RelTy.Tuple restTyDs
+              val atoms = case atoms' of [] => [bigS]
+                | _ => List.map (atoms', fn atom' => X (bigS,atom'))
+            in
+              SOME $ atoms
+            end handle NotPrefix => NONE)
+
+    fun allUnionCombos [] = []
+      | allUnionCombos (a::atoms') = 
+          let
+            val combos' = allUnionCombos atoms'
+            val combos = List.concat [a::combos',
+              List.map (combos', fn combo' => U (a,combo'))]
+          in
+            combos
+          end
+
+    fun allInpCombosOfSort dom sort = allUnionCombos $ 
+          allInpCPsOfSort dom sort
+
+    fun allCPSplits (rapps : RelLang.expr(*RApp*) list) 
+        : RelLang.expr(*RAtom*) list list  = 
+      let
+        (*
+        fun snoc ([],y) = [y]
+          | snoc (x::xs, y) = x::(snoc (xs,y))
+        fun mkCPCombos l1 l2 = case (l1,l2) of 
+            (l1,[]) => []
+          | (l1,rapp::l2') => 
+              let
+                val subRes1 = allCPSplits l1
+                val subRes2 = allCPSplits l2
+                (*
+                 * For every possible split1 of l1 and split2 of l2,
+                 * make a new expression split1 X split2.
+                 * We get a list of expressions, where each expression
+                 * is a crossprd (A X B) at the top-level with A
+                 * containing RApps from only l1 and B containing RApps
+                 * from only l2.
+                 *)
+                val (resl1l2split : expr list) = 
+                  listCrossPrd (subRes1, subRes2,
+                    fn (x1,x2) => crossPrdOf $ List.concat [x1,x2])
+                val res' = mkCPCombos (snoc (l1,rapp)) l2'
+                val fullRes = resl1l2split::res'
+              in
+                fullRes
+              end
+        *)
+        val splits = case rapps of 
+            [] => []
+          | [s] => [[s]]
+          | [s1,s2] => [[X (s1,s2)], [s1,s2]]
+          | [s1,s2,s3] => [[X ((X (s1,s2)),s3)], [X (s1,(X (s2,s3)))],
+                           [X (s1,s2), s3], [s1, X (s2,s3)], 
+                           [s1,s2,s3]]
+          | _ => raise (Fail "Unimpl.")
+        (*
+        val ratomss = List.map (splits, fn split => 
+          List.map (split, fn svars => crossPrdOf conj) svars) splits
+        *)
+      in
+        splits
+      end
+
+    fun sameRE (re1,re2) = 
+      let
+        val len = Vector.length
+      in
+        case (re1,re2) of
+          (U (re11,re12), U (re21,re22)) => sameRE (re11,re21) 
+                andalso sameRE (re12,re22)
+        | (X (re11,re12), X (re21,re22)) => sameRE (re11,re21) 
+                andalso sameRE (re12,re22)
+        | (D (re11,re12), D (re21,re22)) => sameRE (re11,re21) 
+                andalso sameRE (re12,re22)
+        | (rapp1 as R _, rapp2 as R _) => rappEq (rapp1,rapp2)
+        | (T els1, T els2) => len els1 = 0 andalso len els1 = len els2 
+        | _ => false
+
+      end
+  end
 
   structure  HoleMap: APPLICATIVE_MAP where
     type Key.t = string and type Value.t = RP.t vector =
@@ -176,13 +305,111 @@ struct
       SC {tydbinds=tyDB, dom=dom, inpEqs=inpEqs', opEq=opEq'}
     end
 
+  (*
+   * -------------------------------------
+   *          UNIFICATION
+   * -------------------------------------
+   *)
   exception CantUnify
 
-  fun tryUnify (ob,re) = raise (Fail "Unimpl.")
+  local
+    open RelLang
+  in
+    fun unifiable (ratom1,ratom2) = case (ratom1,ratom2) of 
+       (X (rapp1,ratom1'), X (rapp2,ratom2')) => 
+          (rappEq (rapp1,rapp2) andalso unifiable (ratom1',ratom2'))
+     | (rapp1 as R _,rapp2 as R _) => rappEq (rapp1,rapp2)
+     | _ => false
 
-  fun hypothesizeCombos dom inpEqs ratom = 
+    fun tryUnify (re1 (*ob*),re2)  = case re1 of 
+          U (ratom, re1') => 
+            let
+              val re2' = tryUnify (ratom,re2)
+            in
+              tryUnify (re1',re2')
+            end
+        | D _ => raise (Fail "Unimpl.")
+        | ratom => 
+            let
+              val isUnifiable = ref false
+              val disjs = allDisjsInRExpr re2
+              val leftOvers = List.keepAll (disjs,
+                fn (disj) => if unifiable (ratom,disj) 
+                  then (isUnifiable := true; false)
+                  else true) 
+              val _ = if (not (!isUnifiable)) 
+                then raise CantUnify else ()
+            in
+              unionOf leftOvers
+            end
+
+    fun tryUnifySome (ratom, inpEqs) 
+      : (RelLang.expr * RelLang.expr) list= 
+        case List.keepAllMap  
+            (inpEqs, fn (RP.Eq (bigS,sre)) => 
+              let
+                val sreLeft = tryUnify (ratom,sre)
+              in
+                SOME (bigS,sreLeft)
+              end handle CantUnify => NONE) of
+          [] => raise CantUnify
+        | l => l
+  end
+
+  fun hypothesizeCombos dom inpEqs (ratom : RelLang.expr) = 
     let
       open RelLang
+      fun isInputRAbs rapp = List.exists (dom, 
+        fn (rapp',relTy) => rappEq (rapp,rapp'))
+      fun doIt () = 
+        let
+          (*
+           * We need to consider all possible crossprd splits of ratom
+           * for unification.
+           *)
+          val (splits: expr(*ratom*) list list) = 
+                    allCPSplits $ allRappsInRatom ratom
+          (*
+           * Each split is a list of RAtoms, and each RAtom may be
+           * unified with multiple S's. Therefore, each split can have
+           * multiple sols.
+           *)
+          val sol_obs = List.concat $ List.keepAllMap (splits, 
+            fn ratoms => 
+              let
+                val xsys : (expr*expr) list list = List.map (ratoms,
+                  fn ratom => tryUnifySome (ratom,inpEqs))
+                (*
+                 * If an RAtom in a split can't be unified with any
+                 * inpEqn, then this split is useless. tryUnifySome
+                 * raises CantUnify, which leads to this split being
+                 * discarded.
+                 *)
+                val xys = flatten xsys
+                (*
+                 * Each list in xys is a list of (RAtomSol,RAtomOb)
+                 * pairs, such that each pair is a sol-ob for a unique
+                 * RAtom. Their crossprd gives us a (sol,ob) pair.
+                 *)
+                val _ = List.foreach (xys, fn xy => assert 
+                  (List.length xy = List.length ratoms, "Number of \
+                    \(RAtomSol,RAtomOb) pairs in a solution did not \
+                    \match the number of actual RAtoms."))
+                val sol_obs = List.map (xys, 
+                  fn (ra_sol_obs) =>
+                    let
+                      val (ra_sols,ra_obs) = List.unzip ra_sol_obs
+                      val sol = crossPrdOf ra_sols
+                      val ob = toDNF $ crossPrdOf ra_obs
+                    in
+                      (sol,ob)
+                    end)
+              in
+                SOME sol_obs
+              end handle CantUnify => NONE)
+        in
+          sol_obs
+        end
     in
       case ratom of
         Alpha {sort,substs, ...} => 
@@ -205,7 +432,9 @@ struct
           in
             sol_obs
           end
-      | _ => raise (Fail "Unimpl.")
+      | rapp as R _ => if isInputRAbs rapp 
+            then [(ratom, RelLang.T empty_set)] else doIt()
+      | _ => doIt ()
     end
 
   fun applyHypothesis hyp re =
@@ -330,7 +559,7 @@ struct
                 VarEq (lv,rv)
             | (Simple (Rel (RP.Eq (e1,e2)))) => RelEq (e1,e2)
             | _ => Error.bug "Unexpected conjunct in anteP")
-      | _ => raise (Fail "solveThisForAlpha: Unimpl")
+      | _ => raise (Fail "solveThisForAlpha: anteP not conjunction")
       (*
        * Find conseqP eqn, its RApp, RelId, and bound var.
        *)
