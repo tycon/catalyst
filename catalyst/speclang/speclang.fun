@@ -154,9 +154,14 @@ struct
         | U (e1,e2) => U (doIt e1, doIt e2)
         | D (e1,e2) => D (doIt e1, doIt e2)
         | R (relId,argvar) => R (relId, subst argvar)
+        (*
+         * We treat alpha as uninterpreted while applying substs. We
+         * do not ascribe any semantics to pending substs in alpha.
+         *)
         | Alpha {substs=pSubsts, id, holeId, sort} => Alpha 
             {id=id, holeId=holeId, sort=sort,
-              substs = List.concat [Vector.toList substs, pSubsts]} 
+              substs = List.map (pSubsts, 
+                fn (v1,v2) => (subst v1, subst v2))} 
       end
     fun mapRApp expr f = 
       let
