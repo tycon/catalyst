@@ -27,18 +27,6 @@ struct
   val empty_set = RelLang.emptyexpr ()
  
   (*
-  fun oneOf l = 
-    let
-      fun getNextGoodX [] k = raise CantSolve
-        | getNextGoodX (xs as x::xs') k = MLton.Cont.throw (k,xs)
-            handle CantSolve => (print " ** oneOf **\n"; 
-              getNextGoodX xs' k)
-    in
-      MLton.Cont.callcc (getNextGoodX l)
-    end
-  *)
-
-  (*
    * Caution: f should be side-effect free.
    *)
   fun applyWithoneOf ([],f) = raise CantSolve
@@ -81,6 +69,27 @@ struct
                                    structure Value = Value)
     open Map
   end
+
+  structure  AlphaMap: APPLICATIVE_MAP where
+    type Key.t = int and type Value.t = RelLang.expr =
+  struct
+    structure Key = 
+    struct
+      type t = int
+      val equal = op=
+      val layout = L.str o Int.toString
+    end
+    structure Value =
+    struct
+      type t = RelLang.expr
+      val layout = L.str o RelLang.exprToString
+    end
+    structure Map = ApplicativeMap (structure Key = Key
+                                   structure Value = Value)
+    open Map
+  end
+
+  structure AM = AlphaMap
 
   structure  AlphaVCMap: APPLICATIVE_MAP where
     type Key.t = int and type Value.t = VC.t list =
@@ -190,8 +199,105 @@ struct
     end  
 
 
-  fun solveCS cs (dom : (RelLang.expr*RelTy.t) list) 
-        : RelLang.expr = 
+  datatype alpha_puzzle  = AP of {isValid : P.t -> bool, 
+                                  conseqEq : RP.t}
+
+  fun semanticSolve n hypAcc (puzzles : alpha_puzzle vector) dom =
+    let
+      val _ = print "Domain is: "
+      val _ = List.foreach (dom, fn rapp => 
+        print $ RelLang.exprToString rapp)
+      val _ = print "\n"
+      val x = Vector.peekMapi (puzzles,
+        fn (AP {isValid,
+                conseqEq = RP.Eq (RelLang.Alpha {substs, ...},
+                                  opEqRHS)}) =>
+          let
+            (*
+             * If hypAcc is a valid solution, then conseqEq is
+             * satisfied. Hence, the following is valid:
+             *        ctx ⊢ substs(hypAcc) = opEqRHS. 
+             *)
+            val substs = Vector.fromList substs
+            val hypAcc' = RelLang.applySubsts substs hypAcc
+            val r = sanitizeRE $ RelLang.mapAlpha opEqRHS
+              (fn (RelLang.Alpha _) => RelLang.emptyexpr ())
+            val p = P.Rel $ RP.Eq (hypAcc',r)
+          in
+            if not (isValid p) 
+              then SOME (isValid, substs, hypAcc', r, p)
+              else NONE
+          end)
+      val (i,(isValid, substs, hypAcc', r, hypAccIsSol)) = 
+          case x of NONE => raise Return | SOME x => x 
+      val _ = if List.isEmpty dom then raise CantSolve else ()
+      exception Return of bool
+      val {no=notHyps, yes=hyps} = List.partition (dom, 
+        fn d => 
+          let
+            val d' = RelLang.applySubsts substs d
+            (* We don't consider trivial hypotheses for non-trivial r *)
+            val hyp_eq_empty = P.Rel $ RP.Eq (d',empty_set)
+            val _ = if isValid hyp_eq_empty 
+              then raise (Return false) else ()
+            val r_hypAcc = RelLang.D (r,hypAcc')
+            val r_hypAccUhyp = RelLang.D (r, RelLang.U (hypAcc',d'))
+            val subAssn = P.Rel $ RP.Sub (r_hypAccUhyp, r_hypAcc)
+            (*
+             * Since we know hyp is not empty and hypAcc is not a
+             * solution, hyp is relevant iff it leads to progress under
+             * these conditions.
+             * ToDo: it is not enough to assert hyp ≠ ∅. We need to
+             * assert that every known subset of hyp is ≠ ∅.
+             *)
+            val cond = P.Conj (P.Not hyp_eq_empty, P.Not hypAccIsSol)
+            val condSubAssn = P.If (cond, subAssn)
+            (*
+             * Note: r is not ∅, for if it is ∅, then we
+             * wouldn't have gotten this far; semanticSolve
+             * would've terminated immediately with {()} as answer.
+             * hypAcc could be ∅ if:
+             * 1. This is the 1st iteration, and hypAcc is {()}, or
+             * 2. hypAcc is not {()}, but it is semantically
+             * equal to a ∅.
+             * Case 2 is impossible, because it violates the
+             * invariant that (hypAcc ∩ r ≠ ∅) except when
+             * hypAcc={()}. So, we only have to check for case 1.
+             *)
+          in
+            isValid condSubAssn
+          end handle Return tf => tf)
+      val sol = applyWithoneOf (hyps, 
+        fn (hyp::restHyps) => 
+          let
+            val (nstr,istr) =  (Int.toString n,Int.toString i)
+            val _ = print $ "\t Current hypothesis (Level "
+                ^nstr^", VC#"^istr^"): " 
+                ^(RelLang.exprToString hyp)^"\n"
+            val newDom = List.concat [restHyps,notHyps]
+            (*
+             * hyp is a hypothesis for the solution to all puzzles.
+             * Hence, it needs to be applied to all puzzles.
+             *)
+            val newPuzzles = Vector.map (puzzles, 
+              fn (AP {isValid,
+                      conseqEq = RP.Eq (alpha as RelLang.Alpha {substs, ...},
+                                   opEqRHS)}) =>
+                let
+                  val newOpEqRHS = applyHypothesis hyp opEqRHS
+                  val newConseqEq = RP.Eq (alpha,newOpEqRHS)
+                in
+                  AP {isValid=isValid, conseqEq=newConseqEq}
+                end)
+            val newHypAcc = RelLang.U (hypAcc,hyp)
+          in
+            semanticSolve (n+1) newHypAcc newPuzzles newDom
+          end)
+    in
+      sol
+    end handle Return => hypAcc 
+  
+  fun cstrToAlphaPuzzle (cstr:constraint) : alpha_puzzle = 
     let
       val _ = Z3_Encode.logComment " --- New Constraint ---"
       val ctx = Z3_Encode.mkDefaultContext ()
@@ -334,9 +440,9 @@ struct
           open RP
         in
           case rp of Eq (e1,e2) => mkSetEqAssertion (f e1, f e2)
-          | Sub (e1,e2) => mkSubSetAssertion (f e1, f e2)
-          | SubEq (e1,e2) => (fn s => mkOr $ Vector.new2 (mkSetEqAssertion s,
-              mkSubSetAssertion s)) (f e1, f e2)
+          | Sub (e1,e2) => (fn s => mkAnd $ Vector.new2 (mkSubSetAssertion s,
+              mkNot $ mkSetEqAssertion s)) (f e1, f e2)
+          | SubEq (e1,e2) => mkSubSetAssertion (f e1, f e2)
         end
 
       fun encodePred (p:P.t) : Z3_Encode.assertion = 
@@ -347,20 +453,25 @@ struct
             Base bp => encodeBasePred bp
           | Rel rp => encodeRelPred rp
           | Not p' => mkNot $ encodePred p'
+          | If (p1,p2) => mkIf (encodePred p1, encodePred p2)
+          | Conj (p1,p2) => mkAnd $ Vector.new2 (encodePred p1, encodePred p2)
           | _ => raise (Fail "Unimpl.")
         end
 
       val assertRelPred  = dischargeAssertion o encodeRelPred
 
-      fun isValid ctx (* assumps *) p = 
+      (* cstr --> ctx *)
+      val C {tydbinds,anteEqs,conseqEq, ...} = cstr
+      val _ = Vector.foreach (tydbinds, processTyDBind)
+      val _ = Vector.foreach (anteEqs, assertRelPred)
+
+      fun isValid p = 
         let
           val comment = "Checking if ("^(L.toString $ P.layout p)
               ^") is valid... "
           val _ = print comment
           val _ = doPush ()
           val _ = Z3_Encode.logComment comment
-          (* val _ = List.foreach (assumps, dischargeAssertion o
-              encodePred) *)
           val _ = dischargeAssertion $ mkNot $ encodePred p
           val res = Z3_Encode.checkContext ctx
           val _ = doPop ()
@@ -370,120 +481,14 @@ struct
             | _ => raise (Fail "Solver timed out!")
         end
 
-      fun isInvalid ctx p = not $ isValid ctx p
-
-      fun semanticSolve ctx hypAcc 
-                        (conseqEq as 
-                          RP.Eq (alpha as RelLang.Alpha {substs, ...},
-                                 opEqRHS))
-                        dom =
-        let
-          val _ = print "Domain is:\n"
-          val _ = List.foreach (dom, fn rapp => 
-            print $ RelLang.exprToString rapp)
-          val _ = print "\n"
-          val substs = Vector.fromList substs
-          (*
-           * If hypAcc is a valid solution, then conseqEq is
-           * satisfied. Hence, the following is valid:
-           *        ctx ⊢ substs(hypAcc) = opEqRHS. 
-           *)
-          val hypAcc' = RelLang.applySubsts substs hypAcc
-          val r = sanitizeRE $ RelLang.mapAlpha opEqRHS
-            (fn (RelLang.Alpha _) => RelLang.emptyexpr ())
-          val p = P.Rel $ RP.Eq (hypAcc',r)
-          val _ = if isValid ctx p then raise Return else ()
-          val _ = if List.isEmpty dom then raise CantSolve else ()
-          exception Return of bool
-          val {no=notHyps, yes=hyps} = List.partition (dom, 
-            fn d => 
-              let
-                (* As with hypAcc, replace freevars *)
-                val d' = RelLang.applySubsts substs d
-                val hyp_eq_empty = P.Rel $ RP.Eq (d',empty_set)
-                val _ = if isValid ctx hyp_eq_empty 
-                  then raise (Return false) else ()
-                val r_hypAcc = RelLang.D (r,hypAcc')
-                val r_hypAccUhyp = RelLang.D (r, RelLang.U (hypAcc',d'))
-                val subAssn1 = P.Rel $ RP.SubEq (r_hypAccUhyp, r_hypAcc)
-                val _ = if isValid ctx subAssn1 
-                    then raise (Return true)
-                    else raise (Return false)
-                (*
-                val preCond = (P.Not o P.Rel) $ RP.Eq
-                  (r_hypAcc,empty_set)
-                *)
-                (*
-                 * Note: r is not ∅, for if it is ∅, then we
-                 * wouldn't have gotten this far; semanticSolve
-                 * would've terminated immediately with {()} as answer.
-                 * hypAcc could be ∅ if:
-                 * 1. This is the 1st iteration, and hypAcc is {()}, or
-                 * 2. hypAcc is not {()}, but it is semantically
-                 * equal to a ∅.
-                 * Case 2 is impossible, because it violates the
-                 * invariant that (hypAcc ∩ r ≠ ∅) except when
-                 * hypAcc={()}. So, we only have to check for case 1.
-                 *)
-                val r_eq_hyp = RP.Eq (r,d')
-                val r_eq_hyp_assn = P.Rel r_eq_hyp
-                val r_xn_hyp = RelLang.Xn (r,d')
-                val r_xn_hyp_assn = (P.Not o P.Rel) $ RP.Eq 
-                            (r_xn_hyp,empty_set)
-                val r_eqorxn_hyp_assn = P.Disj (r_eq_hyp_assn,
-                                                r_xn_hyp_assn)
-                val _ = if isValid ctx r_xn_hyp_assn then () 
-                          else raise (Return false)
-                val _ = if RelLang.isEmptyExpr hypAcc' then 
-                          raise (Return true) else ()
-                val r_xn_hypAcc = RelLang.Xn (r,hypAcc')
-                val r_xn_hypAcc_assn = P.Rel $ RP.Eq 
-                            (r_xn_hyp,r_xn_hypAcc)
-              in
-                (*isValid ctx [preCond]  assn*)
-                isInvalid ctx r_xn_hypAcc_assn
-              end handle Return tf => tf)
-          val sol = applyWithoneOf (hyps, 
-            fn (hyp::restHyps) => 
-              let
-                val _ = print $ "\t Current hypothesis: "
-                    ^(RelLang.exprToString hyp)^"\n"
-                val newDom = List.concat [restHyps,notHyps]
-                val newOpEqRHS = applyHypothesis hyp opEqRHS
-                val newConseqEq = RP.Eq (alpha,newOpEqRHS)
-                val newHypAcc = RelLang.U (hypAcc,hyp)
-              in
-                semanticSolve ctx newHypAcc newConseqEq newDom
-              end)
-        in
-          sol
-        end handle Return => hypAcc 
-      
-      (* -- Constraint encoding -- *)
-      val C {tydbinds, anteEqs, conseqEq} = cs
-      val RP.Eq (RelLang.Alpha {sort=cspSort,...},_) = conseqEq
-      val _ = Vector.foreach (tydbinds, processTyDBind)
-      val _ = Vector.foreach (anteEqs, assertRelPred)
-      fun domOfSort srt = List.keepAllMap (dom, 
-        fn (rapp,srt') => if RelTy.equal (srt,srt') 
-                            then SOME rapp else NONE)
-      val initHyp = RelLang.emptyexpr ()
-      (*
-       * Hack: we are only looking to infer union invaraints.
-       * We restrict our domain to ratoms of cspSort.
-       *)
-      val sol = semanticSolve ctx initHyp conseqEq (domOfSort cspSort)
-      val _ = print "semanticSolve done. Solution returned is:\n"
-      val _ = print $ RelLang.exprToString sol
-      val _ = print "\n"
     in
-      sol
+      AP {isValid=isValid, conseqEq=conseqEq} 
     end
 
   (*
-   * Solves a given VC for the alpha contained in its conseqP.
+   * Returns constraints imposed by this VC.
    *)
-  fun solveThisForAlpha (VC.T (tydbinds, anteP, conseqP)) 
+  fun constraintsOfVC (VC.T (tydbinds, anteP, conseqP)) 
                         (alphaId:int) =
     let
       (*
@@ -616,9 +621,8 @@ struct
       val _ = print "\n\n"
       val _ = L.print (layoutC cs, print)
       val _ = print "\n"
-      val sol = solveCS cs domRApps
     in
-      ()
+      (cs,domRApps)
     end
 
   (*
@@ -627,12 +631,61 @@ struct
    *)
   fun solveAllForAlpha (vcs : VC.t list) (alphaId:int) = 
     let
-      val sols = List.map (vcs, fn vc => solveThisForAlpha vc alphaId)
+      val astr = Int.toString alphaId
+      val _ = print $ "\n ********* Solving new alpha ("
+            ^astr^")******* \n"
+      val csAndDoms = List.map (vcs, fn vc => constraintsOfVC vc alphaId)
+      val cstrs = List.map (csAndDoms, fn (x,_) => x)
+      val puzzles = Vector.fromList $ List.map (cstrs, cstrToAlphaPuzzle)
+      (*
+       * assert : all conseqEqs have same sort, and same domain.
+       *)
+      val (C {conseqEq, ...},dom)::_ = csAndDoms
+      val RP.Eq (RelLang.Alpha {sort=cspSort,...},_) = conseqEq
+      val domOfCSPSort = List.keepAllMap (dom, 
+        fn (rapp,srt) => if RelTy.equal (srt,cspSort) 
+                            then SOME rapp else NONE)
+      val initHyp = RelLang.emptyexpr ()
+      (*
+       * Hack: we are only looking to infer union invaraints.
+       * We restrict our domain to ratoms of cspSort.
+       *)
+      val sol = semanticSolve 0 initHyp puzzles domOfCSPSort
+        handle CantSolve => 
+          (print $ "No solution for alpha ("^astr^")\n";
+          raise CantSolve)
+      val _ = print $ "Solution for alpha ("^astr^") is: "
+        ^(RelLang.exprToString sol)^"\n"
     in
-      sols
+      sol
+    end
+
+  fun instAlphaInvs am (VC.T (tydbinds,anteP,conseqP)) =
+    let
+      open VC
+      fun doItTup f (x1,x2) = (f x1, f x2)
+      fun doItSP sp = case sp of
+          Rel (RP.Eq (lhs,RelLang.Alpha {id,substs,...})) => 
+            (let
+              val solRE = AM.find am id
+              val thisRE = RelLang.applySubsts (Vector.fromList substs)
+                              solRE
+            in
+              Rel $ RP.Eq (lhs,thisRE)
+            end handle AM.KeyNotFound _ => sp)
+        | _ => sp
+      fun doItVCP vcp = case vcp of
+          Simple sp =>  Simple $ doItSP sp
+        | Conj vcps => Conj $ Vector.map (vcps,doItVCP)
+        | Disj vcps => Disj $ Vector.map (vcps,doItVCP)
+        | Not vcp' => Not $ doItVCP vcp'
+        | _ => raise (Fail "If and Iff Unimpl.")
+    in
+      VC.T (tydbinds, doItVCP anteP, conseqP)
     end
 
   structure HM = HoleMap 
+
   fun solve vcs = 
     let
       (*
@@ -650,8 +703,17 @@ struct
        * it gets dropped from the conjuncts of the hole solution.
        *)
       val (avcs : (int * VC.t list) vector) = AVCM.toVector avcMap
-      val asols = Vector.map (avcs,
-        fn (alphaId,vcs) => solveAllForAlpha vcs alphaId)
+      val am = Vector.fold (avcs,AM.empty,
+        fn ((alphaId,vcs),am) => 
+          let
+            (*
+             * Make use of invariants discovered so far.
+             *)
+            val vcs' = List.map (vcs, instAlphaInvs am)
+            val sol = solveAllForAlpha vcs' alphaId
+          in
+            AM.add am alphaId sol
+          end handle CantSolve => am) 
     in
       raise (Fail "solve is Unimpl.")
     end
