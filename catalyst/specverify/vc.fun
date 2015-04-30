@@ -332,6 +332,8 @@ struct
 
       fun elabRExpr (tab:RelInstTable.t) rexpr =  
         let
+          val idRelId = RelId.fromString "RId"
+          val len = Vector.length
           fun getSymForRInst rinst = 
             (SOME $ RelInstTable.find tab (RInst rinst)) 
               handle RelInstTable.KeyNotFound _ => NONE
@@ -349,7 +351,14 @@ struct
               \ variable "^(Var.toString v)^" not found in TyDBinds")
         in
           case rexpr of
-            RelLang.T _ => (tab,rexpr)
+            RelLang.T els => if len els = 0 orelse len els > 1 
+                then (tab,rexpr)
+                else 
+                  let
+                    val [RelLang.Var x] = Vector.toList els
+                  in
+                    elabRExpr tab $ RelLang.R (idRelId,x)
+                  end
           | RelLang.X t => mapSnd RelLang.X (mapper t)
           | RelLang.U t => mapSnd RelLang.U (mapper t)
           | RelLang.D t => mapSnd RelLang.D (mapper t)

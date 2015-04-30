@@ -40,8 +40,15 @@ struct
          TyD.makeTvar rangeTyvar)
       val relTyS2 = RelTyS.generalize (Vector.new2 (domainTyvar,
         rangeTyvar), relTy2)
+      val re = RE.add re (splRelId2, {ty=relTyS2, map=map})
+      (* RId *)
+      val idRelId = RelId.fromString "RId"
+      val tyvar = Tyvar.newNoname {equality=false}
+      val idRelTy = RelTy.Tuple $ Vector.new2 
+        (TyD.makeTvar tyvar, TyD.makeTvar tyvar)
+      val idRelTyS = RelTyS.generalize (Vector.new1 tyvar, idRelTy)
     in
-      RE.add re (splRelId2, {ty=relTyS2, map=map})
+      RE.add re (idRelId, {ty=idRelTyS, map=map})
     end
 
   fun bootStrapBools (ve: VE.t) = 
