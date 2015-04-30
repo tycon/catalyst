@@ -18,6 +18,7 @@ struct
   fun add map k v = (k,v)::map
   fun remove map k = List.remove (map, fn (k',_) => Key.equal(k,k'))
   fun toVector map = Vector.fromList map
+  fun toList map = map
   fun layout map = L.align (List.map (map, fn (k,v) =>
     L.seq [Key.layout k, L.str " :-> ", Val.layout v]))
 end

@@ -6,6 +6,10 @@ signature SPEC_LANG =
 sig
   include SPEC_LANG_STRUCTS
 
+  structure TyDBinds : APPLICATIVE_MAP where 
+    type Key.t = Var.t and
+    type Value.t = TypeDesc.t
+
   structure RelLang : 
   sig
     structure RelId : ID
@@ -36,12 +40,15 @@ sig
                   | Var of Var.t
     datatype expr = T of elem vector
                   | X of expr * expr
+                  | Xn of expr * expr (* intersection *)
                   | U of expr * expr
                   | D of expr * expr
                   | R of RelId.t * Var.t
                   | Alpha of {id:int, holeId:string,
                               sort: RelType.t, 
-                              substs: (Var.t*Var.t) list}
+                              substs: (Var.t*Var.t) list,
+                              bv:Var.t,
+                              env:TyDBinds.t}
     datatype term = Expr of expr
                   | Star of RelId.t
     val elemToString : elem -> string
@@ -52,10 +59,18 @@ sig
     val crossprd : expr * expr -> expr
     val diff : expr * expr -> expr
     val emptyexpr : unit -> expr
+    val isEmptyExpr : expr -> bool
     val applySubsts : (Var.t * Var.t) vector -> expr -> expr
-    (* newAlpha : holeId * substs -> expr *)
-    val newAlpha : (string * (Var.t * Var.t) list * RelType.t) -> expr
+    (* newAlpha : holeId * substs * holeSort * bv * env -> expr *)
+    val newAlpha :   (string 
+                   * (Var.t * Var.t) list 
+                   * RelType.t
+                   * Var.t
+                   * TyDBinds.t) 
+                 -> expr
+    val exprHasAlpha : expr -> bool
     val mapRApp : expr -> (expr -> expr) -> expr
+    val mapAlpha : expr -> (expr -> expr) -> expr
   end
 
   structure StructuralRelation :
@@ -67,10 +82,6 @@ sig
     val conMapToString : (Con.t * Var.t vector option * RelLang.term) vector -> string
     val toString : t -> string
   end
-
-  structure TyDBinds : APPLICATIVE_MAP where 
-    type Key.t = Var.t and
-    type Value.t = TypeDesc.t
 
   structure Predicate : 
   sig

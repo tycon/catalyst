@@ -11,6 +11,19 @@ struct
   fun varSubst (subst as (new,old)) v = if varStrEq (v,old) 
     then new else v
 
+  structure TyDBinds =
+  struct
+    structure Key = 
+    struct
+      type t = Var.t
+      val layout = L.str o Var.toString
+      fun equal (v1,v2) = (Var.toString v1) = (Var.toString v2)
+    end
+    structure Map = ApplicativeMap (structure Key = Key
+                                   structure Value = TypeDesc)
+    open Map
+  end
+
   structure RelLang =
   struct
     structure RelId = Var
@@ -94,12 +107,15 @@ struct
                   | Var of Var.t
     datatype expr = T of elem vector
                   | X of expr * expr
+                  | Xn of expr * expr (* intersection *)
                   | U of expr * expr
                   | D of expr * expr
                   | R of RelId.t * Var.t
                   | Alpha of {id:int, holeId: string, 
                               substs: (Var.t*Var.t) list,
-                              sort : RelType.t}
+                              sort : RelType.t,
+                              bv:Var.t,
+                              env:TyDBinds.t}
 
     datatype term = Expr of expr
                   | Star of RelId.t
@@ -113,6 +129,8 @@ struct
         T (elvec) => "{(" ^ (Vector.fold (elvec,"",fn(e,acc) => 
           (elemToString e) ^ acc)) ^ ")}"
       | X (e1,e2) => "(" ^ (exprToString e1) ^ " X " 
+          ^ (exprToString e2) ^ ")"
+      | Xn (e1,e2) => "(" ^ (exprToString e1) ^ " Xn " 
           ^ (exprToString e2) ^ ")"
       | U (e1,e2) => "(" ^ (exprToString e1) ^ " U " 
           ^ (exprToString e2) ^ ")"
@@ -135,14 +153,32 @@ struct
     fun union (e1,e2) = U (e1,e2)
     fun crossprd (e1,e2) = X (e1,e2)
     fun diff (e1,e2) = D (e1,e2)
-    fun newAlpha (holeId, substs, sort) = Alpha {substs=substs,
-        holeId=holeId, id=genAlphaId(), sort=sort}
+    fun newAlpha (holeId, substs, sort, bv, env) = 
+        Alpha {substs=substs, holeId=holeId, id=genAlphaId(), 
+               sort=sort, bv=bv, env=env}
+    fun exprHasAlpha e = 
+      let
+        val f = exprHasAlpha
+      in
+        case e of
+          X (e1,e2) => f e1 orelse f e2
+        | Xn (e1,e2) => f e1 orelse f e2
+        | U (e1,e2) => f e1 orelse f e2
+        | D (e1,e2) => f e1 orelse f e2
+        | Alpha _ => true
+        | _ => false
+      end 
+
     fun emptyexpr _ = T (Vector.fromList [])
+
+    fun isEmptyExpr (T els) = Vector.isEmpty els
+      | isEmptyExpr _ = false
+
     fun applySubsts substs rexpr = 
       let
         val doIt = applySubsts substs
         (* caution : telescoped substitutions *)
-        fun subst v = Vector.fold (substs, v, fn ((new,old),v) =>
+        fun subst v = Vector.foldr (substs, v, fn ((new,old),v) =>
           if (Var.toString old = Var.toString v) then new else v)
         fun elemSubst elem = case elem of
             Var v => Var (subst v)
@@ -151,22 +187,40 @@ struct
       case rexpr of 
           T elemv => T (Vector.map (elemv,elemSubst))
         | X (e1,e2) => X (doIt e1, doIt e2)
+        | Xn (e1,e2) => Xn (doIt e1, doIt e2)
         | U (e1,e2) => U (doIt e1, doIt e2)
         | D (e1,e2) => D (doIt e1, doIt e2)
         | R (relId,argvar) => R (relId, subst argvar)
-        | Alpha {substs=pSubsts, id, holeId, sort} => Alpha 
-            {id=id, holeId=holeId, sort=sort,
-              substs = List.concat [Vector.toList substs, pSubsts]} 
+        | Alpha {substs=pSubsts, id, holeId, sort, bv, env} => 
+            Alpha {id=id, holeId=holeId, sort=sort,
+                   substs = List.concat [Vector.toList substs, 
+                                         pSubsts],
+                   bv=bv, env=env} 
       end
+
     fun mapRApp expr f = 
       let
         fun doItTup (x1,x2) = (mapRApp x1 f, mapRApp x2 f)
       in
          case expr of
            X x => X $ doItTup x
+         | Xn x => Xn $ doItTup x
          | U x => U $ doItTup x
          | D x => D $ doItTup x
          | R _ => f expr
+         | _ => expr
+      end
+
+    fun mapAlpha expr f = 
+      let
+        fun doItTup (x1,x2) = (mapAlpha x1 f, mapAlpha x2 f)
+      in
+         case expr of
+           X x => X $ doItTup x
+         | Xn x => Xn $ doItTup x
+         | U x => U $ doItTup x
+         | D x => D $ doItTup x
+         | Alpha _ => f expr
          | _ => expr
       end
 
@@ -198,19 +252,6 @@ struct
       in
         "relation " ^ relid ^ " = " ^ conmap
       end
-  end
-
-  structure TyDBinds =
-  struct
-    structure Key = 
-    struct
-      type t = Var.t
-      val layout = L.str o Var.toString
-      fun equal (v1,v2) = (Var.toString v1) = (Var.toString v2)
-    end
-    structure Map = ApplicativeMap (structure Key = Key
-                                   structure Value = TypeDesc)
-    open Map
   end
 
   structure TyDB = TyDBinds

@@ -123,19 +123,20 @@ structure SpecVerify = SpecVerify (structure VE = VE
 
 structure VC = SpecVerify.VC
 
-structure VCS = VCSolve (structure VC = VC)
-structure HM = VCS.HoleMap
-
-(*
 val (z3_log,z3_log_close) = (fn stream => 
   (fn str => (Out.output (stream,str);
       Out.flush stream), 
    fn () => Out.close stream)) 
    (Out.openOut "catalyst.z3")
 
+(*
 structure VCE = VCEncode (structure VC = VC
                           val z3_log = z3_log)
 *)
+structure VCS = VCSolve (structure VC = VC
+                         val z3_log = z3_log)
+structure HM = VCS.HoleMap
+
 
 (* ------------------------------------------------- *)
 (*                 Lookup Constant                   *)

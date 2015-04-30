@@ -39,6 +39,7 @@ struct
   val assert = Control.assert
   fun $ (f,arg) = f arg
   infixr 5 $
+  fun varStrEq (v1,v2) = Var.toString v1 = Var.toString v2
   fun vectorAppend (vec,e) = Vector.concat [vec,Vector.new1 e]
   fun vectorPrepend (e,vec) = Vector.concat [Vector.new1 e,vec]
   fun vectorFoldrFoldr (vec1,vec2,acc,f) = Vector.foldr (vec1,acc,
@@ -435,11 +436,26 @@ struct
                     $ RelLang.app (relId,bv)
                 fun toStr (h,r) = "(" ^ h ^ ", "^ (RI.toString r) ^ ")"
                 val hrStr = toStr (holeId,relId)
-                val rhs = HashTable.lookup hrMap hrStr
-                  handle HoleRelNotFound => 
+                (*fun mergeSubsts subs1 subs2 = List.foldr (subs1,
+                  subs2, fn ((v12,v11),subs2) => 
+                    if List.exists (subs2, fn (v22,v21) => 
+                      varStrEq (v12,v22) andalso varStrEq (v11,v21))
+                    then subs2
+                    else (v12,v11)::subs2)*)
+                val rhs = 
+                  let
+                     val (RelLang.Alpha {id,sort,...}) = 
+                        HashTable.lookup hrMap hrStr
+                  in
+                    RelLang.Alpha {id=id, sort=sort, 
+                                   substs=substs,
+                                   holeId=holeId,
+                                   bv=bv,
+                                   env=env}
+                  end handle HoleRelNotFound => 
                     let
                       val alpha = RelLang.newAlpha (holeId,substs,
-                                    RelTy.Tuple $ Vector.fromList sort)
+                            RelTy.Tuple $ Vector.fromList sort, bv, env)
                       val _ = HashTable.insert hrMap (hrStr, alpha)
                       (*
                       val _ = print $ "HT Keys: "

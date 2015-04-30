@@ -392,7 +392,7 @@ struct
             val funspec = RefTyS.generalizeAssump (tyvars,funRefTy,
               RefTyS.isAssumption funTyS)
           in
-            VE.add ve (var,funspec)
+            VE.add (VE.remove ve var) (var,funspec)
           end)
 
       fun elabDec (ve : VE.t, dec : Dec.t) : VE.t = 

@@ -1,6 +1,7 @@
 signature VC_SOLVE_STRUCTS =
 sig
   structure VC : VERIFICATION_CONDITION
+  val z3_log : string -> unit
 end
 signature VC_SOLVE =
 sig

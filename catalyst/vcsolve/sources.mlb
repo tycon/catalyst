@@ -13,8 +13,15 @@ local
   ../atoms/sources.mlb
   ../control/sources.mlb
   ../lib/mlton/sources.mlb
-   ../specelab/sources.mlb
+  ../specelab/sources.mlb
   ../specverify/sources.mlb
+  z3_ffi.sig
+  z3_encode.sig
+  ann "allowFFI true" in
+    dylibloader.sml
+    z3_ffi.sml
+    z3_encode.fun
+  end
   vcsolve.sig
   vcsolve.fun
 in
