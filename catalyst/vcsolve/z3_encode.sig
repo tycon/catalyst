@@ -13,9 +13,7 @@ sig
   type struc_rel
   type assertion
   datatype satisfiability = SAT | UNSAT | UNKNOWN
-  exception InvalidOperation
-  val mkDefaultContext : unit -> context
-  val generateAPI : context -> 
+  datatype api = API of 
     {
       bool_sort : sort,
       int_sort : sort,
@@ -47,8 +45,12 @@ sig
       mkOr : assertion vector -> assertion,
       dischargeAssertion :  assertion -> unit,
       doPush : unit -> unit,
-      doPop : unit -> unit
+      doPop : unit -> unit,
+      checkSAT : unit -> satisfiability
     }
+  exception InvalidOperation
+  val mkDefaultContext : unit -> context
+  val generateAPI : context -> api
   val checkContext : context -> satisfiability
   val delContext : context -> unit
   val logComment : string -> unit

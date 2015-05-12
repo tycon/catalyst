@@ -69,6 +69,41 @@ struct
 
   fun logComment str = log (";; "^str^"\n")
 
+  datatype api = API of 
+    {
+      bool_sort : sort,
+      int_sort : sort,
+      const_false : ast,
+      const_true : ast,
+      falsee : assertion,
+      truee : assertion,
+      sortToString : sort -> string,
+      constToString : ast -> string,
+      strucRelToString : struc_rel -> string,
+      mkUninterpretedSort :  unit -> sort,
+      mkConst : (string * sort) -> ast,
+      mkInt : int -> ast,
+      mkStrucRel :  (string * sort vector) -> struc_rel,
+      mkStrucRelApp : struc_rel * ast -> set,
+      mkNullSet : unit -> set,
+      mkSingletonSet : ast vector -> set,
+      mkUnion :  (set * set) -> set,
+      mkIntersection :  (set * set) -> set,
+      mkCrossPrd :  (set * set) -> set ,
+      mkDiff :  (set * set) -> set ,
+      mkSetEqAssertion :  (set * set) -> assertion,
+      mkSubSetAssertion : (set * set) -> assertion,
+      mkConstEqAssertion :  (ast * ast) -> assertion,
+      mkNot :  assertion -> assertion,
+      mkIf : assertion * assertion -> assertion,
+      mkIff : assertion * assertion -> assertion,
+      mkAnd : assertion vector -> assertion,
+      mkOr : assertion vector -> assertion,
+      dischargeAssertion :  assertion -> unit,
+      doPush : unit -> unit,
+      doPop : unit -> unit,
+      checkSAT : unit -> satisfiability
+    }
   (*
    * This function implements an object with encapsulated
    * state (ctx). 
@@ -438,8 +473,10 @@ struct
 
       fun doPush () = (log "(push)\n"; Z3_push ctx)
       fun doPop () = (log "(pop)\n"; Z3_pop (ctx,1))
+      fun checkSAT () = checkContext ctx
+
     in
-      {
+      API {
         bool_sort = Bool bool_sort,
         int_sort = Int int_sort,
         const_false = AST (falsee, Bool bool_sort),
@@ -470,7 +507,8 @@ struct
         mkOr = mkOr,
         dischargeAssertion = dischargeAssertion,
         doPush = doPush,
-        doPop = doPop
+        doPop = doPop,
+        checkSAT = checkSAT
        }
     end
 end

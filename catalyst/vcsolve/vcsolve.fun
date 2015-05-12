@@ -6,6 +6,7 @@ struct
   structure TyDB = TyDBinds
   structure RI = RelLang.RelId
   structure RelTy = RelLang.RelType
+  structure R = RelLang
   structure P = Predicate
   structure BP = Predicate.BasePredicate
   structure RP = Predicate.RelPredicate
@@ -25,6 +26,10 @@ struct
   infixr 5 $
   val assert = Control.assert
   val empty_set = RelLang.emptyexpr ()
+  val len = Vector.length
+  val snd = fn (_,y) => y
+  val fst = fn (x,_) => x
+  fun info str = C.messageStr (C.Detail,str)
  
   (*
    * Caution: f should be side-effect free.
@@ -38,10 +43,11 @@ struct
   fun rappEq (RelLang.R (rid1,vid1), RelLang.R (rid2,vid2)) =
     RI.toString rid1 = RI.toString rid2 andalso
     Var.toString vid1 = Var.toString vid2
+    | rappEq _ = Error.bug "rappEq: one of the arguments is\
+      \ not an rapp\n"
   fun sanitizeRE re = 
     let
       open RelLang
-      val len = Vector.length
     in
       case re of 
         U (T el, re') => if len el = 0 then sanitizeRE re' 
@@ -50,6 +56,37 @@ struct
       | U (re',re'') => U (sanitizeRE re', sanitizeRE re'')
       | ratom => ratom
     end
+
+  fun allInpCPsOfSort dom (RelTy.Tuple tyds) = 
+    let
+      open RelLang
+      exception NotPrefix
+      fun suffix (vec1, vec2, isEq) = 
+        let
+          val len2 = len vec2
+          val _ = if len2 > len vec1 then raise NotPrefix
+                    else ()
+          val prefix1 = Vector.prefix (vec1, len2)
+          val _ = if Vector.forall2 (prefix1,vec2, isEq) then ()
+                    else raise NotPrefix
+        in
+          Vector.dropPrefix (vec1,len2)
+        end
+    in
+      if len tyds = 0 then [] 
+      else List.concat $ List.keepAllMap (dom,
+          fn (d,RelTy.Tuple tyds') => 
+            let
+              val restTyDs = suffix (tyds, tyds', TyD.sameType)
+              val atoms'= allInpCPsOfSort dom $
+                                  RelTy.Tuple restTyDs
+              val atoms = case atoms' of [] => [d]
+                | _ => List.map (atoms', fn atom' => X (d,atom'))
+            in
+              SOME $ atoms
+            end handle NotPrefix => NONE)
+    end
+
 
   structure  HoleMap: APPLICATIVE_MAP where
     type Key.t = string and type Value.t = RP.t vector =
@@ -178,14 +215,14 @@ struct
   fun applyHypothesis hyp (re : RelLang.expr) : RelLang.expr =
     let
       open RelLang
-      (*val _ = print $ "applyHypothesis: hyp "^(exprToString hyp)
+      (*val _ = info $ "applyHypothesis: hyp "^(exprToString hyp)
         ^" in "^(exprToString re)^"\n"*)
       fun doSubstsInHyp substs = applySubsts 
           (Vector.fromList substs) hyp
       fun doItRatom ratom = case ratom of
           Alpha {substs, ...} => U (doSubstsInHyp substs,
             ratom)
-        | X (s,ratom') => raise (Fail "applyHyp: CrossPrd Unimpl.")
+        | X (a1,a2) => X (doItRatom a1, doItRatom a2)
         | U _ => Error.bug "applyHypothesis: Expected RAtom. \
                             \Got RExpr."
         | D _ => Error.bug "applyHypothesis: Expected RAtom. \
@@ -198,19 +235,67 @@ struct
       | ratom => doItRatom ratom
     end  
 
-
-  datatype alpha_puzzle  = AP of {isValid : P.t -> bool, 
+  datatype vc_ctx = VCCtx of {z3API: Z3_Encode.api,
+                              encodePred: P.t -> Z3_Encode.assertion,
+                              encodeRelExpr : R.expr -> Z3_Encode.set}
+  datatype alpha_puzzle  = AP of {vcCtx : vc_ctx,
                                   conseqEq : RP.t}
+
+  
+  fun isValid (VCCtx {z3API, encodePred, ...}) assumps p = 
+    let
+      val Z3_Encode.API {doPush, doPop, checkSAT,
+          mkNot, dischargeAssertion, ...} = z3API
+      val comment = "Checking if ("^(L.toString $ P.layout p)
+          ^") is valid... "
+      val _ = info comment
+      val _ = doPush ()
+      val _ = Z3_Encode.logComment comment
+      val _ = List.foreach (assumps, dischargeAssertion o
+          encodePred)
+      val _ = dischargeAssertion $ mkNot $ encodePred p
+      val res = checkSAT ()
+      val _ = doPop ()
+    in
+      case res of Z3_Encode.UNSAT => (info "Yes\n"; true) 
+        | Z3_Encode.SAT => (info "No\n"; false)
+        | _ => raise (Fail "Solver timed out!")
+    end
+
+  fun isConsistent (VCCtx {z3API, encodePred, ...}) assns  = 
+    let
+      val Z3_Encode.API {doPush, doPop, checkSAT,
+          mkNot, dischargeAssertion, ...} = z3API
+      val comment = "Checking if the context is consistent ..."
+      val _ = info comment
+      val _ = doPush ()
+      val _ = Z3_Encode.logComment comment
+      val _ = List.foreach (assns, dischargeAssertion o
+          encodePred)
+      val res = checkSAT ()
+      val _ = doPop ()
+    in
+      case res of Z3_Encode.UNSAT => (info "No\n"; false) 
+        | Z3_Encode.SAT => (info "Yes\n"; true)
+        | _ => raise (Fail "Solver timed out!")
+    end
+
+  (*
+   * Given a vc_ctx and a set (preds) of predicates, return a
+   * predicate which is mutually inconsistent with a (possibly empty)
+   * subset of the given set (preds).
+   * vc_ctx should remain observably invariant.
+   *)
 
   fun semanticSolve n hypAcc (puzzles : alpha_puzzle vector) dom =
     let
-      val _ = print "Domain is: "
+      val _ = info "Domain is: "
       val _ = List.foreach (dom, fn rapp => 
-        print $ RelLang.exprToString rapp)
-      val _ = print "\n"
+        info $ (RelLang.exprToString rapp)^" ")
+      val _ = info "\n"
       val x = Vector.peekMapi (puzzles,
-        fn (AP {isValid,
-                conseqEq = RP.Eq (RelLang.Alpha {substs, ...},
+        fn (AP {vcCtx,
+                conseqEq = RP.Eq (RelLang.Alpha {substs, id, ...},
                                   opEqRHS)}) =>
           let
             (*
@@ -224,22 +309,62 @@ struct
               (fn (RelLang.Alpha _) => RelLang.emptyexpr ())
             val p = P.Rel $ RP.Eq (hypAcc',r)
           in
-            if not (isValid p) 
-              then SOME (isValid, substs, hypAcc', r, p)
+            if not (isValid vcCtx [] p) 
+              then SOME (vcCtx, substs, id, hypAcc', r, p)
               else NONE
           end)
-      val (i,(isValid, substs, hypAcc', r, hypAccIsSol)) = 
+      val (i,(vcCtx, substs, alphaId, hypAcc', r, hypAccIsSol)) = 
           case x of NONE => raise Return | SOME x => x 
       val _ = if List.isEmpty dom then raise CantSolve else ()
-      exception Return of bool
-      val {no=notHyps, yes=hyps} = List.partition (dom, 
-        fn d => 
+      val _ = print $ "Finding hypotheses for alphaId: "
+        ^(Int.toString alphaId)^"\n"
+      (*
+       * Finding minimal unsat cores among propositions of form 
+       *    {(r - hypAcc) ∩ d = ∅ | d ∈ dom}
+       *)
+      val VCCtx (vcAPI as {z3API = Z3_Encode.API api, ...}) = vcCtx
+      val encodePred = #encodePred vcAPI
+      val encodeRelExpr = #encodeRelExpr vcAPI
+      val mkNullSet = #mkNullSet api
+      val mkSetEqAssertion = #mkSetEqAssertion api
+      val mkNot = #mkNot api
+      val doPush = #doPush api
+      val doPop = #doPop api
+      val dischargeAssertion = #dischargeAssertion api
+      val doSubsts = R.applySubsts substs
+      val r_subeq_hypAcc = P.Rel $ RP.SubEq (r,hypAcc')
+      val _ = if isValid vcCtx [] r_subeq_hypAcc
+        (* r C= hypAcc Unimpl. *)
+        then raise CantSolve else ()
+      (*
+       * Find non-empty domain
+       *)
+      val nonEmptyDom = List.keepAll (dom, 
+        fn d =>
           let
-            val d' = RelLang.applySubsts substs d
-            (* We don't consider trivial hypotheses for non-trivial r *)
+            (* We don't consider trivial hypotheses *)
+            val d' = doSubsts d
+            val d_eq_empty = P.Rel $ RP.Eq (d',empty_set)
+          in
+            not $ isValid vcCtx [] d_eq_empty
+          end)
+
+      val _ = doPush ()
+      val nullSet = mkNullSet ()
+      val r_hypAcc = encodeRelExpr $ RelLang.D (r,hypAcc')
+      val r_hypAcc_non_empty = mkNot $ mkSetEqAssertion 
+                                        (r_hypAcc, nullSet)
+      val _ = dischargeAssertion r_hypAcc_non_empty
+      (* ToDo: val props = {(r - hypAcc) ∩ d = ∅ | d ∈ dom}*)
+      val minUnsatCores = findMinUnsatCores props
+      val _ = doPop ()
+      val idom = List.mapi (dom, fn x => x)
+      exception Return of bool
+      val {no=notHypsi, yes=hypsi} = List.partition (idom, 
+        fn (i,d) => 
+          let
+            val d' = doSubsts d
             val hyp_eq_empty = P.Rel $ RP.Eq (d',empty_set)
-            val _ = if isValid hyp_eq_empty 
-              then raise (Return false) else ()
             val r_hypAcc = RelLang.D (r,hypAcc')
             val r_hypAccUhyp = RelLang.D (r, RelLang.U (hypAcc',d'))
             val subAssn = P.Rel $ RP.Sub (r_hypAccUhyp, r_hypAcc)
@@ -263,10 +388,12 @@ struct
              * Case 2 is impossible, because it violates the
              * invariant that (hypAcc ∩ r ≠ ∅) except when
              * hypAcc={()}. So, we only have to check for case 1.
-             *)
+             *) 
           in
-            isValid condSubAssn
+            isValid vcCtx [] condSubAssn
           end handle Return tf => tf)
+      val (hyps, notHyps) = (List.map (hypsi,snd), 
+                             List.map (notHypsi,snd))
       val sol = applyWithoneOf (hyps, 
         fn (hyp::restHyps) => 
           let
@@ -280,14 +407,15 @@ struct
              * Hence, it needs to be applied to all puzzles.
              *)
             val newPuzzles = Vector.map (puzzles, 
-              fn (AP {isValid,
+              fn (AP {vcCtx,
                       conseqEq = RP.Eq (alpha as RelLang.Alpha {substs, ...},
                                    opEqRHS)}) =>
                 let
                   val newOpEqRHS = applyHypothesis hyp opEqRHS
                   val newConseqEq = RP.Eq (alpha,newOpEqRHS)
                 in
-                  AP {isValid=isValid, conseqEq=newConseqEq}
+                  AP {vcCtx=vcCtx,
+                      conseqEq=newConseqEq}
                 end)
             val newHypAcc = RelLang.U (hypAcc,hyp)
           in
@@ -304,7 +432,7 @@ struct
       (*
        * APIs for the current context.
        *)
-      val api = Z3_Encode.generateAPI ctx
+      val Z3_Encode.API api = Z3_Encode.generateAPI ctx
       val bool_sort = #bool_sort api
       val int_sort = #int_sort api
       val const_true = #const_true api
@@ -414,28 +542,39 @@ struct
                 encodeBasePred bp2)
         end
 
-      fun encodeRelPred (rp:RP.t) : Z3_Encode.assertion =
+      val encodeRelElem = 
         let
           open RelLang
-          val encodeRelElem = fn (Int i) => mkInt i 
+        in
+          fn (Int i) => mkInt i 
             | Bool true => const_true | Bool false => const_false
             | Var v => getConstForVar v
-          fun encodeRelExpr (e:expr) : Z3_Encode.set =
-            case e of T els => (case Vector.length els of
-                0 => mkNullSet ()
-              | _ => mkSingletonSet $ Vector.map (els,
-                  encodeRelElem))
-            | X (e1,e2) => mkCrossPrd (encodeRelExpr e1, 
-                encodeRelExpr e2)
-            | Xn (e1,e2) => mkIntersection (encodeRelExpr e1, 
-                encodeRelExpr e2)
-            | U (e1,e2) => mkUnion (encodeRelExpr e1, 
-                encodeRelExpr e2)
-            | D (e1,e2) => mkDiff (encodeRelExpr e1, 
-                encodeRelExpr e2)
-            | R (rid,v) => mkStrucRelApp (getStrucRelForRelId rid,
-                getConstForVar v)
-            | Alpha _ => Error.bug "Antecedent is not alpha-free!\n"
+        end 
+
+      fun encodeRelExpr (e:R.expr) : Z3_Encode.set =
+        let
+          open RelLang
+        in
+          case e of T els => (case Vector.length els of
+            0 => mkNullSet ()
+          | _ => mkSingletonSet $ Vector.map (els,
+              encodeRelElem))
+          | X (e1,e2) => mkCrossPrd (encodeRelExpr e1, 
+              encodeRelExpr e2)
+          | Xn (e1,e2) => mkIntersection (encodeRelExpr e1, 
+              encodeRelExpr e2)
+          | U (e1,e2) => mkUnion (encodeRelExpr e1, 
+              encodeRelExpr e2)
+          | D (e1,e2) => mkDiff (encodeRelExpr e1, 
+              encodeRelExpr e2)
+          | R (rid,v) => mkStrucRelApp (getStrucRelForRelId rid,
+              getConstForVar v)
+          | Alpha _ => Error.bug "Antecedent is not alpha-free!\n"
+        end 
+          
+      fun encodeRelPred (rp:RP.t) : Z3_Encode.assertion =
+        let
+          
           val f = encodeRelExpr
           open RP
         in
@@ -447,6 +586,7 @@ struct
 
       fun encodePred (p:P.t) : Z3_Encode.assertion = 
         let
+          val z3_true = truee
           open P
         in
           case p of
@@ -455,6 +595,7 @@ struct
           | Not p' => mkNot $ encodePred p'
           | If (p1,p2) => mkIf (encodePred p1, encodePred p2)
           | Conj (p1,p2) => mkAnd $ Vector.new2 (encodePred p1, encodePred p2)
+          | True => z3_true
           | _ => raise (Fail "Unimpl.")
         end
 
@@ -464,25 +605,11 @@ struct
       val C {tydbinds,anteEqs,conseqEq, ...} = cstr
       val _ = Vector.foreach (tydbinds, processTyDBind)
       val _ = Vector.foreach (anteEqs, assertRelPred)
-
-      fun isValid p = 
-        let
-          val comment = "Checking if ("^(L.toString $ P.layout p)
-              ^") is valid... "
-          val _ = print comment
-          val _ = doPush ()
-          val _ = Z3_Encode.logComment comment
-          val _ = dischargeAssertion $ mkNot $ encodePred p
-          val res = Z3_Encode.checkContext ctx
-          val _ = doPop ()
-        in
-          case res of Z3_Encode.UNSAT => (print "Yes\n"; true) 
-            | Z3_Encode.SAT => (print "No\n"; false)
-            | _ => raise (Fail "Solver timed out!")
-        end
-
+      val vcCtx = VCCtx {z3API=Z3_Encode.API api, 
+                         encodePred=encodePred,
+                         encodeRelExpr=encodeRelExpr}
     in
-      AP {isValid=isValid, conseqEq=conseqEq} 
+      AP {vcCtx=vcCtx, conseqEq=conseqEq} 
     end
 
   (*
@@ -504,7 +631,6 @@ struct
         fn ((relvar,TyD.Tarrow (TyD.Trecord trec,_)), tyDB) => 
           let
             val relId = RI.fromString $ Var.toString relvar
-            val snd = fn (x,y) => y
             val domTyd::rngTyds = Vector.toListMap 
                 (Record.toVector trec, snd)
             val rngSort = RelTy.Tuple $ Vector.fromList rngTyds
@@ -642,15 +768,29 @@ struct
        *)
       val (C {conseqEq, ...},dom)::_ = csAndDoms
       val RP.Eq (RelLang.Alpha {sort=cspSort,...},_) = conseqEq
-      val domOfCSPSort = List.keepAllMap (dom, 
-        fn (rapp,srt) => if RelTy.equal (srt,cspSort) 
-                            then SOME rapp else NONE)
       val initHyp = RelLang.emptyexpr ()
       (*
        * Hack: we are only looking to infer union invaraints.
        * We restrict our domain to ratoms of cspSort.
        *)
-      val sol = semanticSolve 0 initHyp puzzles domOfCSPSort
+      (*val domOfCSPSort = List.keepAllMap (dom, 
+        fn (rapp,srt) => if RelTy.equal (srt,cspSort) 
+                            then SOME rapp else NONE)*)
+      val dom' = List.keepAll (dom, 
+        fn (RelLang.R (rid,_),_) => 
+          let
+            val rstr = RI.toString rid
+            fun rstrHasPrefix s = String.hasPrefix (rstr,{prefix=s})
+          in
+            not (rstrHasPrefix "Roa") andalso 
+            not (rstrHasPrefix "Rob") (*andalso 
+            (case cspSort of RelTy.Tuple tys => 
+                if len tys > 1 
+                    then not (rstrHasPrefix "Rhd")
+                    else true)*)
+          end)
+      val atoms = allInpCPsOfSort dom' cspSort
+      val sol = semanticSolve 0 initHyp puzzles atoms
         handle CantSolve => 
           (print $ "No solution for alpha ("^astr^")\n";
           raise CantSolve)
